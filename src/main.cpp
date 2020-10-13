@@ -6,28 +6,33 @@
 #include "Adafruit_BME280.h"
 #include "SparkFun_AS3935.h"
 
-#define COUNTER_0 17
-#define COUNTER_1 21
+#define COUNTER_0 25
+#define COUNTER_1 26
 #define COUNTER_2 12
 #define COUNTER_3 27
 #define COUNTER_4 33
 #define COUNTER_5 15
 #define COUNTER_6 32
 #define COUNTER_7 14
-#define COUNTER_RST 16
+#define COUNTER_RST 34
 #define LIGHTN_INT 4
-#define LIGHTN_CS 36
-#define ANEM_INT 39
-#define WEATHER_VANE 34 
+#define ANEM_INT 36
+#define WEATHER_VANE 39 
+#define LIGHTN_CS 21
 #define BATT 35
 #define LED 13
+#define SEALEVELPRESSURE_HPA 1013.25
+
+#define INDOOR 0x12 
+#define OUTDOOR 0xE
+#define LIGHTNING_INT 0x08
+#define DISTURBER_INT 0x04
+#define NOISE_INT 0x01
+
 
 Adafruit_BME280 bme;
-Adafruit_Sensor *bme_temp = bme.getTemperatureSensor();
-Adafruit_Sensor *bme_pressure = bme.getPressureSensor();
-Adafruit_Sensor *bme_humidity = bme.getHumiditySensor();
-
 SparkFun_AS3935 lightning;
+bool sawLightning;
 
 int read_counter() {
   char count = digitalRead(COUNTER_0);
@@ -53,7 +58,37 @@ float readBattery() {
   return battLvl;
 }
 
+void take_reading() {
+  int count = read_counter();
+  reset_counter();
+  Serial.print("Counter = ");
+  Serial.println(count);
+  
+  Serial.print("Temperature = ");
+  Serial.print(bme.readTemperature());
+  Serial.println(" *C");
+
+  Serial.print("Pressure = ");
+  Serial.print(bme.readPressure() / 100.0F);
+  Serial.println(" hPa");
+
+  Serial.print("Approx. Altitude = ");
+  Serial.print(bme.readAltitude(SEALEVELPRESSURE_HPA));
+  Serial.println(" m");
+
+  Serial.print("Humidity = ");
+  Serial.print(bme.readHumidity());
+  Serial.println(" %");
+}
+
+void IRAM_ATTR LIGHTN_ISR() {
+  sawLightning = true;
+}
+
 void setup() {
+  Serial.begin(9600);
+  delay(500);
+
   pinMode(LED, OUTPUT);
   pinMode(COUNTER_0, INPUT);
   pinMode(COUNTER_1, INPUT);
@@ -65,31 +100,68 @@ void setup() {
   pinMode(COUNTER_7, INPUT);
   pinMode(COUNTER_RST, OUTPUT);
 
+  pinMode(LIGHTN_INT, INPUT);
+
+  Serial.println("Setting up!\n");
+
   if (! bme.begin(0x77, &Wire)) {
     Serial.println("Could not find a valid BME280 sensor, check wiring!");
     while (1);
   }
-  
-  bme_temp->printSensorDetails();
-  bme_pressure->printSensorDetails();
-  bme_humidity->printSensorDetails();
 
   SPI.begin(); // For SPI
-  if( !lightning.beginSPI(LIGHTN_CS) ) { 
+  if(!lightning.beginSPI(LIGHTN_CS) ) { 
     Serial.println ("Lightning Detector did not start up, freezing!"); 
     while(1); 
   }
-
-  Serial.begin(9600);
-  // put your setup code here, to run once:
+  lightning.maskDisturber(false);
+  lightning.setIndoorOutdoor(INDOOR);
+  lightning.setNoiseLevel(1);
+  lightning.spikeRejection(1);
+  lightning.lightningThreshold(1);
+  sawLightning = false;
+  attachInterrupt(LIGHTN_INT, LIGHTN_ISR, HIGH);
 }
 
 void loop() {
-  int count = read_counter();
-  reset_counter();
+  take_reading();
 
-  Serial.println("Looped");
-  Serial.println(count);
+  for(int reg = 0; reg < 9; reg++) {
+    Serial.print("Register ");
+    Serial.print(reg);
+    Serial.print(": ");
+    Serial.println(lightning._readRegister(reg));
+  }
+
+  if (digitalRead(LIGHTN_INT) == 1) {
+    sawLightning = false;
+    Serial.println("Lightning interrupt recieved");
+    delay(2);
+    int intVal = lightning.readInterruptReg();
+
+    if (intVal == NOISE_INT) {
+      Serial.println("Noise.");
+    } else if (intVal == DISTURBER_INT) {
+      Serial.println("Disturber.");
+    } else if (intVal == LIGHTNING_INT) {
+      Serial.println("Lightning Strike Detected!");
+      // Lightning! Now how far away is it? Distance estimation takes into
+      // account previously seen events.
+      byte distance = lightning.distanceToStorm();
+      Serial.print("Approximately: ");
+      Serial.print(distance);
+      Serial.println("km away!");
+
+      // "Lightning Energy" and I do place into quotes intentionally, is a pure
+      // number that does not have any physical meaning.
+      long lightEnergy = lightning.lightningEnergy();
+      Serial.print("Lightning Energy: ");
+      Serial.println(lightEnergy);
+    } else {
+      Serial.print("Interrupt value: ");
+      Serial.println(intVal);
+    }
+  }
+  Serial.println("Looped\n");
   delay(1000);
-  // put your main code here, to run repeatedly:
 }
