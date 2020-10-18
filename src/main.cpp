@@ -126,13 +126,6 @@ void setup() {
 void loop() {
   take_reading();
 
-  for(int reg = 0; reg < 9; reg++) {
-    Serial.print("Register ");
-    Serial.print(reg);
-    Serial.print(": ");
-    Serial.println(lightning._readRegister(reg));
-  }
-
   if (digitalRead(LIGHTN_INT) == 1) {
     sawLightning = false;
     Serial.println("Lightning interrupt recieved");
