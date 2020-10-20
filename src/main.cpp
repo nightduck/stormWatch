@@ -1,8 +1,10 @@
 #include <Arduino.h>
 #include "SPI.h"
 #include "Wire.h"
+#include "EEPROM.h"
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
+#include "esp_partition.h"
 #include "Adafruit_BME280.h"
 #include "SparkFun_AS3935.h"
 
@@ -29,6 +31,30 @@
 #define DISTURBER_INT 0x04
 #define NOISE_INT 0x01
 
+const esp_partition_t* data_partition;
+
+typedef struct weather_reading {
+  float temp;
+  float pressure;
+  float humidity;
+  int wind_direction;
+  float wind_speed;
+  float rainfall_mm;
+} weather_reading_t;
+
+typedef struct lightn_reading {
+  int power;
+  time_t timestamp;
+} lightn_reading_t;
+
+typedef struct config {
+  size_t weather_ptr;
+  size_t lightning_ptr;
+  int node_num;
+} config_t;
+
+config_t cfg;
+bool online;
 
 Adafruit_BME280 bme;
 SparkFun_AS3935 lightning;
@@ -59,17 +85,22 @@ float readBattery() {
 }
 
 void take_reading() {
+  weather_reading_t reading;
+  reading.temp = bme.readTemperature();
+  reading.pressure = bme.readPressure() / 100.0F;
+  reading.humidity = bme.readHumidity();
+
   int count = read_counter();
   reset_counter();
   Serial.print("Counter = ");
   Serial.println(count);
   
   Serial.print("Temperature = ");
-  Serial.print(bme.readTemperature());
+  Serial.print(reading.temp);
   Serial.println(" *C");
 
   Serial.print("Pressure = ");
-  Serial.print(bme.readPressure() / 100.0F);
+  Serial.print(reading.pressure);
   Serial.println(" hPa");
 
   Serial.print("Approx. Altitude = ");
@@ -77,8 +108,91 @@ void take_reading() {
   Serial.println(" m");
 
   Serial.print("Humidity = ");
-  Serial.print(bme.readHumidity());
+  Serial.print(reading.humidity);
   Serial.println(" %");
+
+  // Serial.print("Writing reading to address ");
+  // Serial.println(weather_reading_ptr);
+  // EEPROM.put(weather_reading_ptr, reading);
+  // weather_reading_ptr += sizeof(weather_reading_t);
+  // EEPROM.write(0, weather_reading_ptr);
+  // EEPROM.commit();
+  // Serial.println("Successful");
+}
+
+bool record_weather_reading(const weather_reading_t *reading) {
+  // If in online mode, publish to cloud
+  if (online) {
+    online = false; // TODO: Implement online features, for now: fail
+    return true;
+  }
+
+  // If in offline mode (or if most recent reading failed to publish),
+  // save to flash
+  if (!online) {
+    // Record a weather reading by adding data to bottom of data partition
+    if (cfg.weather_ptr + sizeof(weather_reading_t) > cfg.lightning_ptr) return false;
+
+    if (esp_partition_write(data_partition, cfg.weather_ptr, reading, sizeof(reading)) != ESP_OK)
+      return false;
+
+    cfg.weather_ptr += sizeof(reading);
+    return (esp_partition_write(data_partition, 0, &cfg, sizeof(cfg)) == ESP_OK);
+  }
+
+  return false; // IDK how you could possibly reach here
+}
+
+bool record_lightning_event(const lightn_reading_t *event) {
+  // If in online mode, publish to cloud
+  if (online) {
+    online = false; // TODO: Implement online features, for now: fail
+    return true;
+  }
+
+  // If in offline mode (or if most recent reading failed to publish),
+  // save to flash
+  if (!online) {
+      // Record a lightning event by adding data to bottom of data partition
+      if (cfg.lightning_ptr - sizeof(event) < cfg.lightning_ptr) return false;
+
+      cfg.lightning_ptr -= sizeof(event);
+      if (esp_partition_write(data_partition, cfg.lightning_ptr, event, sizeof(event)) != ESP_OK)
+        return false;
+
+      return (esp_partition_write(data_partition, 0, &cfg, sizeof(cfg)) == ESP_OK);
+  }
+
+  return false; // IDK how you could possibly reach here
+}
+
+void factory_reset() {
+  Serial.println("Factory reset");
+  cfg.node_num = 4;
+  cfg.lightning_ptr = data_partition->size;
+  cfg.weather_ptr = sizeof(config_t);
+  esp_partition_write(data_partition, 0, &cfg, sizeof(config_t));
+
+  Serial.print("Node ID: ");
+  Serial.println(cfg.node_num);
+  Serial.print("Weather address: ");
+  Serial.println((int)cfg.lightning_ptr);
+  Serial.print("Node ID: ");
+  Serial.println((int)cfg.weather_ptr);
+}
+
+void print_hw_debug() {
+  Serial.print("Free heap: ");
+  Serial.println(ESP.getFreeHeap());
+  Serial.print("Free psram: ");
+  Serial.println(ESP.getFreePsram());
+  Serial.print("Free sketch space: ");
+  Serial.println(ESP.getFreeSketchSpace());
+  Serial.print("Sketch size: ");
+  Serial.println(ESP.getSketchSize());
+  Serial.print("Flash size: ");
+  Serial.println(ESP.getFlashChipSize());
+  Serial.println();
 }
 
 void IRAM_ATTR LIGHTN_ISR() {
@@ -87,7 +201,40 @@ void IRAM_ATTR LIGHTN_ISR() {
 
 void setup() {
   Serial.begin(9600);
+  //EEPROM.begin(EEPROM_SIZE);
   delay(500);
+  
+  // weather_reading_ptr = EEPROM.read(0);
+  // lightn_reading_ptr = EEPROM.read(1);
+
+  // if(weather_reading_ptr > 2) {
+  //   Serial.println("Previous readings exist");
+  // }
+  //   Serial.print("weather_reading_ptr: ");
+  //   Serial.println(weather_reading_ptr);
+  //   Serial.print("sizeof(weather_reading_ptr): ");
+  //   Serial.println(sizeof(weather_reading_t));
+  //   Serial.print("Number of readings: ");
+  //   Serial.println((weather_reading_ptr - 2)/sizeof(weather_reading_t));
+
+  // for(; weather_reading_ptr > 2; weather_reading_ptr -= sizeof(weather_reading_t)) {
+  //   weather_reading_t reading;
+  //   EEPROM.get(weather_reading_ptr, reading);
+
+  //   Serial.println("Old reading: ");
+  //   Serial.print("Temperature = ");
+  //   Serial.print(reading.temp);
+  //   Serial.println(" *C");
+
+  //   Serial.print("Pressure = ");
+  //   Serial.print(reading.pressure);
+  //   Serial.println(" hPa");
+
+  //   Serial.print("Humidity = ");
+  //   Serial.print(reading.humidity);
+  //   Serial.println(" %");
+  //   delay(500);
+  // }
 
   pinMode(LED, OUTPUT);
   pinMode(COUNTER_0, INPUT);
@@ -99,8 +246,29 @@ void setup() {
   pinMode(COUNTER_6, INPUT);
   pinMode(COUNTER_7, INPUT);
   pinMode(COUNTER_RST, OUTPUT);
-
   pinMode(LIGHTN_INT, INPUT);
+  online = true;
+
+  data_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, "app_data");
+
+  // If factory reset button held down
+  if (false) {
+    factory_reset();
+    while(false)
+      delay(100);
+    ESP.restart();
+  } else {
+    esp_partition_read(data_partition, 0, &cfg, sizeof(config_t));
+
+    Serial.print("Node ID: ");
+    Serial.println(cfg.node_num);
+    Serial.print("Weather address: ");
+    Serial.println((int)cfg.weather_ptr);
+    Serial.print("Node ID: ");
+    Serial.println((int)cfg.lightning_ptr);
+  }
+
+  while(true);
 
   Serial.println("Setting up!\n");
 
@@ -116,7 +284,7 @@ void setup() {
   }
   lightning.maskDisturber(false);
   lightning.setIndoorOutdoor(INDOOR);
-  lightning.setNoiseLevel(1);
+  lightning.setNoiseLevel(5);
   lightning.spikeRejection(1);
   lightning.lightningThreshold(1);
   sawLightning = false;
@@ -124,9 +292,9 @@ void setup() {
 }
 
 void loop() {
-  take_reading();
+  //take_reading();
 
-  if (digitalRead(LIGHTN_INT) == 1) {
+  if (sawLightning) {
     sawLightning = false;
     Serial.println("Lightning interrupt recieved");
     delay(2);
@@ -155,6 +323,7 @@ void loop() {
       Serial.println(intVal);
     }
   }
-  Serial.println("Looped\n");
-  delay(1000);
+  //Serial.println("Looped\n");
+  //print_hw_debug();
+  delay(100);
 }
