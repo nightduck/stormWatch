@@ -1,10 +1,9 @@
 #include <Arduino.h>
 #include "SPI.h"
 #include "Wire.h"
-#include "EEPROM.h"
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
-#include "esp_partition.h"
+#include "SPIFFS.h"
 #include "Adafruit_BME280.h"
 #include "SparkFun_AS3935.h"
 
@@ -20,10 +19,13 @@
 #define LIGHTN_INT 4
 #define ANEM_INT 36
 #define WEATHER_VANE 39 
-#define LIGHTN_CS 21
+#define LIGHTN_CS 0     // Bogus pin, since CS is tied low
+#define FACTORY_RESET 21
 #define BATT 35
 #define LED 13
 #define SEALEVELPRESSURE_HPA 1013.25
+#define FLASH_START 32
+#define CONFIG_ADDR 0
 
 #define INDOOR 0x12 
 #define OUTDOOR 0xE
@@ -31,7 +33,9 @@
 #define DISTURBER_INT 0x04
 #define NOISE_INT 0x01
 
-const esp_partition_t* data_partition;
+#define CONFIG_FILENAME "/config"
+#define WEATHER_FILENAME "/weather_readings"
+#define LIGHTNING_FILENAME "/lightning_events"
 
 typedef struct weather_reading {
   float temp;
@@ -45,11 +49,9 @@ typedef struct weather_reading {
 typedef struct lightn_reading {
   int power;
   time_t timestamp;
-} lightn_reading_t;
+} lightn_event_t;
 
 typedef struct config {
-  size_t weather_ptr;
-  size_t lightning_ptr;
   int node_num;
 } config_t;
 
@@ -59,6 +61,7 @@ bool online;
 Adafruit_BME280 bme;
 SparkFun_AS3935 lightning;
 bool sawLightning;
+bool factoryReset;
 
 int read_counter() {
   char count = digitalRead(COUNTER_0);
@@ -82,6 +85,146 @@ void reset_counter() {
 float readBattery() {
   float battLvl = 6.6 * analogRead(BATT) / 4096;
   return battLvl;
+}
+
+void print_hw_debug() {
+  Serial.print("Free heap: ");
+  Serial.println(ESP.getFreeHeap());
+  Serial.print("Free psram: ");
+  Serial.println(ESP.getFreePsram());
+  Serial.print("Free sketch space: ");
+  Serial.println(ESP.getFreeSketchSpace());
+  Serial.print("Sketch size: ");
+  Serial.println(ESP.getSketchSize());
+  Serial.print("Flash size: ");
+  Serial.println(ESP.getFlashChipSize());
+  Serial.print("Battery Level: ");
+  Serial.println(readBattery());
+
+
+  // config_t temp;
+  // esp_partition_read(data_partition, CONFIG_ADDR, &temp, sizeof(config_t));
+  // Serial.print("Node ID: ");
+  // Serial.println(temp.node_num);
+  // Serial.print("Weather address: ");
+  // Serial.println((int)temp.weather_ptr);
+  // Serial.print("Lightning address: ");
+  // Serial.println((int)temp.lightning_ptr);
+  // Serial.println();
+}
+
+void factory_reset() {
+  File config = SPIFFS.open("/config", FILE_WRITE);
+  Serial.println("Creating config file");
+  config_t cfg;
+  cfg.node_num = read_counter();
+  config.write((uint8_t*)&cfg, sizeof(cfg));
+  config.close();
+}
+
+bool record_weather_reading(const weather_reading_t *reading) {
+  // If in online mode, publish to cloud
+  if (online) {
+    online = false; // TODO: Implement online features, for now: fail
+  }
+  Serial.println("Recording weather reading");
+  // If in offline mode (or if most recent reading failed to publish),
+  // save to flash
+  if (!online) {
+    File weather = SPIFFS.open(WEATHER_FILENAME, FILE_APPEND);
+    if (!weather) {
+      return false;
+    }
+    if (weather.write((uint8_t*)reading, sizeof(weather_reading_t)) < sizeof(weather_reading_t)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  return false; // IDK how you could possibly reach here
+}
+
+bool record_lightning_event(const lightn_event_t *event) {
+  // If in online mode, publish to cloud
+  if (online) {
+    online = false; // TODO: Implement online features, for now: fail
+  }
+
+  // If in offline mode (or if most recent reading failed to publish),
+  // save to flash
+  if (!online) {
+    File lightning = SPIFFS.open(WEATHER_FILENAME, FILE_APPEND);
+    if (!lightning) {
+      return false;
+    }
+    if (lightning.write((uint8_t*)event, sizeof(lightn_event_t)) < sizeof(lightn_event_t)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  return false; // IDK how you could possibly reach here
+}
+
+bool publish_backlog() {
+  Serial.println("Inspecting offline backlog");
+
+  File weather = SPIFFS.open(WEATHER_FILENAME, FILE_READ);
+  File lightning = SPIFFS.open(LIGHTNING_FILENAME, FILE_READ);
+  if (!weather || !lightning) {
+    Serial.println("Unable to open config files");
+    return false;
+  }
+  
+  Serial.print("Weather readings: ");
+  Serial.println(weather.size() / sizeof(weather_reading_t));
+  Serial.print("Lightning events: ");
+  Serial.println(lightning.size() / sizeof(lightn_event_t));
+  Serial.println();
+
+  weather_reading_t reading;
+  while(weather.read((uint8_t*)&reading, sizeof(weather_reading_t)) != 0) {
+    // TODO: Replace this with WiFi upload
+    Serial.print("Temperature = ");
+    Serial.print(reading.temp);
+    Serial.println(" *C");
+
+    Serial.print("Pressure = ");
+    Serial.print(reading.pressure);
+    Serial.println(" hPa");
+
+    Serial.print("Humidity = ");
+    Serial.print(reading.humidity);
+    Serial.println(" %");
+
+    Serial.print("Rainfall = ");
+    Serial.print(reading.rainfall_mm);
+    Serial.println(" mm");
+
+    Serial.print("Wind direction = ");
+    Serial.println(reading.wind_direction);
+
+    Serial.print("Humidity = ");
+    Serial.print(reading.wind_speed);
+    Serial.println(" kmh");
+    Serial.println();
+  };
+
+  lightn_event_t event;
+  while(lightning.read((uint8_t*)&event, sizeof(lightn_event_t)) != 0) {
+    // TODO: Replace this with WiFi upload
+    Serial.print("Lightning energy = ");
+    Serial.print(event.power);
+
+    Serial.print("Timestamp = ");
+    Serial.print(event.timestamp);
+  }
+
+  SPIFFS.remove(WEATHER_FILENAME);
+  SPIFFS.remove(LIGHTNING_FILENAME);
+  return true;
 }
 
 void take_reading() {
@@ -111,88 +254,15 @@ void take_reading() {
   Serial.print(reading.humidity);
   Serial.println(" %");
 
-  // Serial.print("Writing reading to address ");
-  // Serial.println(weather_reading_ptr);
-  // EEPROM.put(weather_reading_ptr, reading);
-  // weather_reading_ptr += sizeof(weather_reading_t);
-  // EEPROM.write(0, weather_reading_ptr);
-  // EEPROM.commit();
-  // Serial.println("Successful");
+  if (!record_weather_reading(&reading)) {
+    Serial.println("FAILED TO SAVE DATA. ABORTING");
+    print_hw_debug();
+    while(true);
+  };
 }
 
-bool record_weather_reading(const weather_reading_t *reading) {
-  // If in online mode, publish to cloud
-  if (online) {
-    online = false; // TODO: Implement online features, for now: fail
-    return true;
-  }
-
-  // If in offline mode (or if most recent reading failed to publish),
-  // save to flash
-  if (!online) {
-    // Record a weather reading by adding data to bottom of data partition
-    if (cfg.weather_ptr + sizeof(weather_reading_t) > cfg.lightning_ptr) return false;
-
-    if (esp_partition_write(data_partition, cfg.weather_ptr, reading, sizeof(reading)) != ESP_OK)
-      return false;
-
-    cfg.weather_ptr += sizeof(reading);
-    return (esp_partition_write(data_partition, 0, &cfg, sizeof(cfg)) == ESP_OK);
-  }
-
-  return false; // IDK how you could possibly reach here
-}
-
-bool record_lightning_event(const lightn_reading_t *event) {
-  // If in online mode, publish to cloud
-  if (online) {
-    online = false; // TODO: Implement online features, for now: fail
-    return true;
-  }
-
-  // If in offline mode (or if most recent reading failed to publish),
-  // save to flash
-  if (!online) {
-      // Record a lightning event by adding data to bottom of data partition
-      if (cfg.lightning_ptr - sizeof(event) < cfg.lightning_ptr) return false;
-
-      cfg.lightning_ptr -= sizeof(event);
-      if (esp_partition_write(data_partition, cfg.lightning_ptr, event, sizeof(event)) != ESP_OK)
-        return false;
-
-      return (esp_partition_write(data_partition, 0, &cfg, sizeof(cfg)) == ESP_OK);
-  }
-
-  return false; // IDK how you could possibly reach here
-}
-
-void factory_reset() {
-  Serial.println("Factory reset");
-  cfg.node_num = 4;
-  cfg.lightning_ptr = data_partition->size;
-  cfg.weather_ptr = sizeof(config_t);
-  esp_partition_write(data_partition, 0, &cfg, sizeof(config_t));
-
-  Serial.print("Node ID: ");
-  Serial.println(cfg.node_num);
-  Serial.print("Weather address: ");
-  Serial.println((int)cfg.lightning_ptr);
-  Serial.print("Node ID: ");
-  Serial.println((int)cfg.weather_ptr);
-}
-
-void print_hw_debug() {
-  Serial.print("Free heap: ");
-  Serial.println(ESP.getFreeHeap());
-  Serial.print("Free psram: ");
-  Serial.println(ESP.getFreePsram());
-  Serial.print("Free sketch space: ");
-  Serial.println(ESP.getFreeSketchSpace());
-  Serial.print("Sketch size: ");
-  Serial.println(ESP.getSketchSize());
-  Serial.print("Flash size: ");
-  Serial.println(ESP.getFlashChipSize());
-  Serial.println();
+void IRAM_ATTR FACTORY_RESET_ISR() {
+  factoryReset = true;
 }
 
 void IRAM_ATTR LIGHTN_ISR() {
@@ -200,40 +270,14 @@ void IRAM_ATTR LIGHTN_ISR() {
 }
 
 void setup() {
-  Serial.begin(9600);
-  //EEPROM.begin(EEPROM_SIZE);
+  Serial.begin(115200);
   delay(500);
-  
-  // weather_reading_ptr = EEPROM.read(0);
-  // lightn_reading_ptr = EEPROM.read(1);
+  Serial.println("Serial initialized");
 
-  // if(weather_reading_ptr > 2) {
-  //   Serial.println("Previous readings exist");
-  // }
-  //   Serial.print("weather_reading_ptr: ");
-  //   Serial.println(weather_reading_ptr);
-  //   Serial.print("sizeof(weather_reading_ptr): ");
-  //   Serial.println(sizeof(weather_reading_t));
-  //   Serial.print("Number of readings: ");
-  //   Serial.println((weather_reading_ptr - 2)/sizeof(weather_reading_t));
-
-  // for(; weather_reading_ptr > 2; weather_reading_ptr -= sizeof(weather_reading_t)) {
-  //   weather_reading_t reading;
-  //   EEPROM.get(weather_reading_ptr, reading);
-
-  //   Serial.println("Old reading: ");
-  //   Serial.print("Temperature = ");
-  //   Serial.print(reading.temp);
-  //   Serial.println(" *C");
-
-  //   Serial.print("Pressure = ");
-  //   Serial.print(reading.pressure);
-  //   Serial.println(" hPa");
-
-  //   Serial.print("Humidity = ");
-  //   Serial.print(reading.humidity);
-  //   Serial.println(" %");
-  //   delay(500);
+  // Serial.println("Awaken get ready...");
+  // for(int i = 0; i < 10; i++) {
+  //   Serial.println(i);
+  //   delay(1000);
   // }
 
   pinMode(LED, OUTPUT);
@@ -247,30 +291,35 @@ void setup() {
   pinMode(COUNTER_7, INPUT);
   pinMode(COUNTER_RST, OUTPUT);
   pinMode(LIGHTN_INT, INPUT);
-  online = true;
+  pinMode(FACTORY_RESET, INPUT);
+  online = false;
 
-  data_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, "app_data");
 
-  // If factory reset button held down
-  if (false) {
-    factory_reset();
-    while(false)
-      delay(100);
-    ESP.restart();
+  if (!SPIFFS.begin(true)) {
+    Serial.println("Could not initialize SPIFFS");
+    while (true);
   } else {
-    esp_partition_read(data_partition, 0, &cfg, sizeof(config_t));
-
-    Serial.print("Node ID: ");
-    Serial.println(cfg.node_num);
-    Serial.print("Weather address: ");
-    Serial.println((int)cfg.weather_ptr);
-    Serial.print("Node ID: ");
-    Serial.println((int)cfg.lightning_ptr);
+    Serial.print("Size of filesystem: ");
+    Serial.println(SPIFFS.totalBytes());
+    Serial.print("Used: ");
+    Serial.println(SPIFFS.usedBytes());
   }
 
-  while(true);
+  // Open the config file. If none exist, do initial configuration
+  if (!SPIFFS.exists("/config")) {
+    factory_reset();
+  }
 
   Serial.println("Setting up!\n");
+
+  File config = SPIFFS.open("/config", FILE_READ);
+  config_t cfg;
+  config.read((uint8_t*)&cfg, sizeof(cfg));
+  Serial.print("Node number: ");
+  Serial.println(cfg.node_num);
+  config.close();
+
+  publish_backlog();
 
   if (! bme.begin(0x77, &Wire)) {
     Serial.println("Could not find a valid BME280 sensor, check wiring!");
@@ -289,12 +338,19 @@ void setup() {
   lightning.lightningThreshold(1);
   sawLightning = false;
   attachInterrupt(LIGHTN_INT, LIGHTN_ISR, HIGH);
+
+  factoryReset = false;
+  attachInterrupt(FACTORY_RESET, FACTORY_RESET_ISR, RISING);
 }
 
 void loop() {
-  //take_reading();
+  if (factoryReset) {
+    factory_reset();
 
-  if (sawLightning) {
+    while(digitalRead(FACTORY_RESET));
+    delay(100);
+    ESP.restart();
+  } else if (sawLightning) {
     sawLightning = false;
     Serial.println("Lightning interrupt recieved");
     delay(2);
@@ -322,8 +378,11 @@ void loop() {
       Serial.print("Interrupt value: ");
       Serial.println(intVal);
     }
+  } else {
+    take_reading();
   }
-  //Serial.println("Looped\n");
+  Serial.println("Looped\n");
+  
   //print_hw_debug();
-  delay(100);
+  delay(1000);
 }
