@@ -60,11 +60,7 @@ typedef struct lightn_reading {
   time_t timestamp;
 } lightn_event_t;
 
-typedef struct config {
-  int node_num;
-} config_t;
-
-config_t cfg;
+int node_num;
 bool online;
 
 Adafruit_BME280 bme;
@@ -86,8 +82,7 @@ void messageHandler(String &topic, String &payload) {
 void connectAWS()
 {
   //WiFi.mode(WIFI_STA);
-  WiFi.begin("NETGEAR84", "noodlesfreak492meout");
-
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.println("Connecting to Wi-Fi");
 
   while (WiFi.status() != WL_CONNECTED){
@@ -161,26 +156,6 @@ void print_hw_debug() {
   Serial.println(ESP.getFlashChipSize());
   Serial.print("Battery Level: ");
   Serial.println(readBattery());
-
-
-  // config_t temp;
-  // esp_partition_read(data_partition, CONFIG_ADDR, &temp, sizeof(config_t));
-  // Serial.print("Node ID: ");
-  // Serial.println(temp.node_num);
-  // Serial.print("Weather address: ");
-  // Serial.println((int)temp.weather_ptr);
-  // Serial.print("Lightning address: ");
-  // Serial.println((int)temp.lightning_ptr);
-  // Serial.println();
-}
-
-void factory_reset() {
-  File config = SPIFFS.open("/config", FILE_WRITE);
-  Serial.println("Creating config file");
-  config_t cfg;
-  cfg.node_num = read_counter();
-  config.write((uint8_t*)&cfg, sizeof(cfg));
-  config.close();
 }
 
 bool record_weather_reading(const weather_reading_t *reading) {
@@ -322,10 +297,6 @@ void take_reading() {
   };
 }
 
-void IRAM_ATTR FACTORY_RESET_ISR() {
-  factoryReset = true;
-}
-
 void IRAM_ATTR LIGHTN_ISR() {
   sawLightning = true;
 }
@@ -355,8 +326,6 @@ void setup() {
   //pinMode(FACTORY_RESET, INPUT);
   online = true;
 
-  connectAWS();
-
   if (!SPIFFS.begin(true)) {
     Serial.println("Could not initialize SPIFFS");
     while (true);
@@ -367,19 +336,23 @@ void setup() {
     Serial.println(SPIFFS.usedBytes());
   }
 
-  // Open the config file. If none exist, do initial configuration
+  // Check config file exists
   if (!SPIFFS.exists("/config")) {
-    factory_reset();
+    Serial.println("Config file not present! Halting!");
+    while(true);
   }
 
-  Serial.println("Setting up!\n");
+  Serial.println("Reading configuration");
+  StaticJsonDocument<256> config;
+  File fin = SPIFFS.open("/config");
+  deserializeJson(config, fin);
+  node_num = config["id"];
+  Serial.println("Node ID: ");
+  Serial.println(node_num);
 
-  File config = SPIFFS.open("/config", FILE_READ);
-  config_t cfg;
-  config.read((uint8_t*)&cfg, sizeof(cfg));
-  Serial.print("Node number: ");
-  Serial.println(cfg.node_num);
-  config.close();
+  connectAWS();
+
+  Serial.println("Setting up!\n");
 
   publish_backlog();
 
@@ -402,19 +375,10 @@ void setup() {
   lightning.clearStatistics(true);
   sawLightning = false;
   attachInterrupt(LIGHTN_INT, LIGHTN_ISR, HIGH);
-
-  // factoryReset = false;
-  // attachInterrupt(FACTORY_RESET, FACTORY_RESET_ISR, RISING);
 }
 
 void loop() {
-  if (factoryReset) {
-    factory_reset();
-
-    // while(digitalRead(FACTORY_RESET));
-    // delay(100);
-    // ESP.restart();
-  } else if (digitalRead(LIGHTN_INT)) {
+  if (digitalRead(LIGHTN_INT)) {
     sawLightning = false;
     Serial.println("Lightning interrupt recieved");
     delay(2);
