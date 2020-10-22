@@ -6,6 +6,11 @@
 #include "SPIFFS.h"
 #include "Adafruit_BME280.h"
 #include "SparkFun_AS3935.h"
+#include "secrets.h"
+#include <WiFiClientSecure.h>
+#include <MQTTClient.h>
+#include <ArduinoJson.h>
+#include "WiFi.h"
 
 #define COUNTER_0 25
 #define COUNTER_1 26
@@ -37,6 +42,10 @@
 #define WEATHER_FILENAME "/weather_readings"
 #define LIGHTNING_FILENAME "/lightning_events"
 
+// The MQTT topics that this device should publish/subscribe
+#define AWS_IOT_PUBLISH_TOPIC   "esp32/pub"
+#define AWS_IOT_SUBSCRIBE_TOPIC "esp32/sub"
+
 typedef struct weather_reading {
   float temp;
   float pressure;
@@ -62,6 +71,58 @@ Adafruit_BME280 bme;
 SparkFun_AS3935 lightning;
 bool sawLightning;
 bool factoryReset;
+
+WiFiClientSecure net = WiFiClientSecure();
+MQTTClient client = MQTTClient(256);
+
+void messageHandler(String &topic, String &payload) {
+  Serial.println("incoming: " + topic + " - " + payload);
+
+//  StaticJsonDocument<200> doc;
+//  deserializeJson(doc, payload);
+//  const char* message = doc["message"];
+}
+
+void connectAWS()
+{
+  //WiFi.mode(WIFI_STA);
+  WiFi.begin("NETGEAR84", "noodlesfreak492meout");
+
+  Serial.println("Connecting to Wi-Fi");
+
+  while (WiFi.status() != WL_CONNECTED){
+    delay(500);
+    Serial.print(".");
+  }
+
+  // Configure WiFiClientSecure to use the AWS IoT device credentials
+  net.setCACert(AWS_CERT_CA);
+  net.setCertificate(AWS_CERT_CRT);
+  net.setPrivateKey(AWS_CERT_PRIVATE);
+
+  // Connect to the MQTT broker on the AWS endpoint we defined earlier
+  client.begin(AWS_IOT_ENDPOINT, 8883, net);
+
+  // Create a message handler
+  client.onMessage(messageHandler);
+
+  Serial.print("Connecting to AWS IOT");
+
+  while (!client.connect(THINGNAME)) {
+    Serial.print(".");
+    delay(100);
+  }
+
+  if(!client.connected()){
+    Serial.println("AWS IoT Timeout!");
+    return;
+  }
+
+  // Subscribe to a topic
+  client.subscribe(AWS_IOT_SUBSCRIBE_TOPIC);
+
+  Serial.println("AWS IoT Connected!");
+}
 
 int read_counter() {
   char count = digitalRead(COUNTER_0);
@@ -293,6 +354,8 @@ void setup() {
   pinMode(LIGHTN_INT, INPUT);
   //pinMode(FACTORY_RESET, INPUT);
   online = true;
+
+  connectAWS();
 
   if (!SPIFFS.begin(true)) {
     Serial.println("Could not initialize SPIFFS");
