@@ -330,7 +330,7 @@ void setup() {
     Serial.println("Could not initialize SPIFFS");
     while (true);
   } else {
-    Serial.print("Size of filesystem: ");
+    Serial.print("Size of entire filesystem: ");
     Serial.println(SPIFFS.totalBytes());
     Serial.print("Used: ");
     Serial.println(SPIFFS.usedBytes());
