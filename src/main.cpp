@@ -19,8 +19,8 @@
 #define LIGHTN_INT 4
 #define ANEM_INT 36
 #define WEATHER_VANE 39 
-#define LIGHTN_CS 0     // Bogus pin, since CS is tied low
-#define FACTORY_RESET 21
+#define LIGHTN_CS 21     // Bogus pin, since CS is tied low
+//#define FACTORY_RESET 21
 #define BATT 35
 #define LED 13
 #define SEALEVELPRESSURE_HPA 1013.25
@@ -291,9 +291,8 @@ void setup() {
   pinMode(COUNTER_7, INPUT);
   pinMode(COUNTER_RST, OUTPUT);
   pinMode(LIGHTN_INT, INPUT);
-  pinMode(FACTORY_RESET, INPUT);
-  online = false;
-
+  //pinMode(FACTORY_RESET, INPUT);
+  online = true;
 
   if (!SPIFFS.begin(true)) {
     Serial.println("Could not initialize SPIFFS");
@@ -336,21 +335,23 @@ void setup() {
   lightning.setNoiseLevel(5);
   lightning.spikeRejection(1);
   lightning.lightningThreshold(1);
+  lightning.watchdogThreshold(3);
+  lightning.clearStatistics(true);
   sawLightning = false;
   attachInterrupt(LIGHTN_INT, LIGHTN_ISR, HIGH);
 
-  factoryReset = false;
-  attachInterrupt(FACTORY_RESET, FACTORY_RESET_ISR, RISING);
+  // factoryReset = false;
+  // attachInterrupt(FACTORY_RESET, FACTORY_RESET_ISR, RISING);
 }
 
 void loop() {
   if (factoryReset) {
     factory_reset();
 
-    while(digitalRead(FACTORY_RESET));
-    delay(100);
-    ESP.restart();
-  } else if (sawLightning) {
+    // while(digitalRead(FACTORY_RESET));
+    // delay(100);
+    // ESP.restart();
+  } else if (digitalRead(LIGHTN_INT)) {
     sawLightning = false;
     Serial.println("Lightning interrupt recieved");
     delay(2);
@@ -379,10 +380,10 @@ void loop() {
       Serial.println(intVal);
     }
   } else {
-    take_reading();
+    //take_reading();
   }
-  Serial.println("Looped\n");
+  //Serial.println("Looped\n");
   
   //print_hw_debug();
-  delay(1000);
+  delay(100);
 }
