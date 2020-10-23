@@ -6,7 +6,6 @@
 #include "SPIFFS.h"
 #include "Adafruit_BME280.h"
 #include "SparkFun_AS3935.h"
-#include "secrets.h"
 #include <WiFiClientSecure.h>
 #include <MQTTClient.h>
 #include <ArduinoJson.h>
@@ -60,13 +59,17 @@ typedef struct lightn_reading {
   time_t timestamp;
 } lightn_event_t;
 
-int node_num;
+StaticJsonDocument<256> config;
 bool online;
 
 Adafruit_BME280 bme;
 SparkFun_AS3935 lightning;
 bool sawLightning;
 bool factoryReset;
+
+const char * AWS_CERT_CA;
+const char * AWS_CERT_CRT;
+const char * AWS_CERT_PRIVATE;
 
 WiFiClientSecure net = WiFiClientSecure();
 MQTTClient client = MQTTClient(256);
@@ -82,7 +85,8 @@ void messageHandler(String &topic, String &payload) {
 void connectAWS()
 {
   //WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  // TODO: Error handling with the keys. Fallback to offline mode if failed
+  WiFi.begin(config["wifi-ssid"].as<const char*>(), config["wifi-password"].as<const char*>());
   Serial.println("Connecting to Wi-Fi");
 
   while (WiFi.status() != WL_CONNECTED){
@@ -96,14 +100,14 @@ void connectAWS()
   net.setPrivateKey(AWS_CERT_PRIVATE);
 
   // Connect to the MQTT broker on the AWS endpoint we defined earlier
-  client.begin(AWS_IOT_ENDPOINT, 8883, net);
+  client.begin(config["aws-iot-endpoint"].as<const char*>(), 8883, net);
 
   // Create a message handler
   client.onMessage(messageHandler);
 
   Serial.print("Connecting to AWS IOT");
 
-  while (!client.connect(THINGNAME)) {
+  while (!client.connect(config["thingname"].as<const char*>())) {
     Serial.print(".");
     delay(100);
   }
@@ -343,12 +347,17 @@ void setup() {
   }
 
   Serial.println("Reading configuration");
-  StaticJsonDocument<256> config;
   File fin = SPIFFS.open("/config");
   deserializeJson(config, fin);
-  node_num = config["id"];
-  Serial.println("Node ID: ");
-  Serial.println(node_num);
+  Serial.print("Node ID: ");
+  Serial.println(config["id"].as<int>());
+
+  File certCA = SPIFFS.open(config["aws-cert-ca"].as<const char*>());
+  File certCRT = SPIFFS.open(config["aws-cert-crt"].as<const char*>());
+  File certPrivate = SPIFFS.open(config["aws-cert-private"].as<const char*>());
+  AWS_CERT_CA = certCA.readString().c_str();
+  AWS_CERT_CRT = certCRT.readString().c_str();
+  AWS_CERT_PRIVATE = certPrivate.readString().c_str();
 
   connectAWS();
 
@@ -366,12 +375,15 @@ void setup() {
     Serial.println ("Lightning Detector did not start up, freezing!"); 
     while(1); 
   }
-  lightning.maskDisturber(false);
-  lightning.setIndoorOutdoor(INDOOR);
-  lightning.setNoiseLevel(5);
-  lightning.spikeRejection(1);
-  lightning.lightningThreshold(1);
-  lightning.watchdogThreshold(3);
+  lightning.maskDisturber((bool)config["mask-disturber"]);
+  if (config["indoor"])
+    lightning.setIndoorOutdoor(INDOOR);
+  else
+    lightning.setIndoorOutdoor(OUTDOOR);
+  lightning.setNoiseLevel(config["noise-level"]);
+  lightning.spikeRejection(config["spike-rejection"]);
+  lightning.lightningThreshold(config["lightning-threshold"]);
+  lightning.watchdogThreshold(config["watchdog-threshold"]);
   lightning.clearStatistics(true);
   sawLightning = false;
   attachInterrupt(LIGHTN_INT, LIGHTN_ISR, HIGH);

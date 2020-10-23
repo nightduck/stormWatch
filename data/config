@@ -1,7 +1,7 @@
 {
     "id" : 4,
     "mask-disturbers" : true,
-    "indoor-outdoor" : "outdoor",
+    "indoor" : true,
     "noise-level" : 1,
     "spike-rejection" : 1,
     "lightning-threshold" : 1,
@@ -9,8 +9,8 @@
     "wifi-ssid" : "WIFI_NAME_HERE",
     "wifi-password" : "WIFI_PASSWORD_HERE",
     "aws-iot-endpoint" : "ENDPOINTNAME.iot.REGION.amazonaws.com",
-    "thing-name" : "stormWatch_test",
-    "aws-cert-ca" : "PASTE CERT HERE",
-    "aws-cert-crt" : "PASTE CERT HERE",
-    "aws-cert-private" : "PASTE KEY HERE"
+    "thingname" : "stormWatch_test",
+    "aws-cert-ca" : "FILENAME.key",
+    "aws-cert-crt" : "FILENAME.crt",
+    "aws-cert-private" : "FILENAME.pem"
 }
