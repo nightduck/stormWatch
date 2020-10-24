@@ -9,6 +9,7 @@
 #include <WiFiClientSecure.h>
 #include <MQTTClient.h>
 #include <ArduinoJson.h>
+#include "secrets.h"
 #include "WiFi.h"
 
 #define COUNTER_0 25
@@ -67,9 +68,9 @@ SparkFun_AS3935 lightning;
 bool sawLightning;
 bool factoryReset;
 
-const char * AWS_CERT_CA;
-const char * AWS_CERT_CRT;
-const char * AWS_CERT_PRIVATE;
+// const char * AWS_CERT_CA;
+// const char * AWS_CERT_CRT;
+// const char * AWS_CERT_PRIVATE;
 
 WiFiClientSecure net = WiFiClientSecure();
 MQTTClient client = MQTTClient(256);
@@ -82,32 +83,64 @@ void messageHandler(String &topic, String &payload) {
 //  const char* message = doc["message"];
 }
 
-void connectAWS()
+void connectToWiFi()
 {
   //WiFi.mode(WIFI_STA);
   // TODO: Error handling with the keys. Fallback to offline mode if failed
-  WiFi.begin(config["wifi-ssid"].as<const char*>(), config["wifi-password"].as<const char*>());
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
   Serial.println("Connecting to Wi-Fi");
 
   while (WiFi.status() != WL_CONNECTED){
     delay(500);
     Serial.print(".");
   }
+  Serial.println("Connected to Wi-Fi");
+}
 
+void connectAWS()
+{
+  // Serial.println("Reading certs from memory");
+  // // Load in AWS certs and keys from flash
+  // const char * filename = config["aws-cert-ca"].as<const char*>();
+  // Serial.println("FILENAME: ");
+  // Serial.println(filename);
+  // File certCA = SPIFFS.open("/708ec0abd2-ca_root1.pem", FILE_READ);
+  // File certCRT = SPIFFS.open("/708ec0abd2-certificate.pem.crt", FILE_READ);
+  // File certPrivate = SPIFFS.open("/708ec0abd2-private.pem.key", FILE_READ);
+  // if (!certCA || !certCRT || !certPrivate) {
+  //   Serial.println("AWS files not found in flash! Can't find: ");
+  //   Serial.println(config["aws-cert-ca"].as<const char*>());
+  //   Serial.println(config["aws-cert-crt"].as<const char*>());
+  //   Serial.println(config["aws-cert-private"].as<const char*>());
+  //   while(true);
+  // }
+  // // AWS_CERT_CA = certCA.readString().c_str();
+  // // AWS_CERT_CRT = certCRT.readString().c_str();
+  // // AWS_CERT_PRIVATE = certPrivate.readString().c_str();
+  // certCA.close();
+  // certCRT.close();
+  // certPrivate.close();
+  // delay(2000);
+  // Serial.println("Public Key");
+  // Serial.println(AWS_CERT_CA);
+
+  connectToWiFi();
+  
   // Configure WiFiClientSecure to use the AWS IoT device credentials
   net.setCACert(AWS_CERT_CA);
   net.setCertificate(AWS_CERT_CRT);
   net.setPrivateKey(AWS_CERT_PRIVATE);
 
   // Connect to the MQTT broker on the AWS endpoint we defined earlier
-  client.begin(config["aws-iot-endpoint"].as<const char*>(), 8883, net);
+  client.begin(AWS_IOT_ENDPOINT, 8883, net);
 
   // Create a message handler
   client.onMessage(messageHandler);
 
   Serial.print("Connecting to AWS IOT");
 
-  while (!client.connect(config["thingname"].as<const char*>())) {
+  while (!client.connect(THINGNAME)) {
     Serial.print(".");
     delay(100);
   }
@@ -165,7 +198,22 @@ void print_hw_debug() {
 bool record_weather_reading(const weather_reading_t *reading) {
   // If in online mode, publish to cloud
   if (online) {
-    online = false; // TODO: Implement online features, for now: fail
+    StaticJsonDocument<256> json;
+    json["temp"] = reading->temp;
+    json["pressure"] = reading->pressure;
+    json["humidity"] = reading->humidity;
+    json["wind_direction"] = reading->wind_direction;
+    json["wind_speed"] = reading->wind_speed;
+    json["rainfall_mm"] = reading->rainfall_mm;
+    char jsonBuffer[256];
+    serializeJson(json, jsonBuffer);
+    if(!client.publish(AWS_IOT_PUBLISH_TOPIC, jsonBuffer)) {
+      online = false;
+    } else
+    {
+      Serial.println("Published reading");
+      return true;
+    }
   }
   Serial.println("Recording weather reading");
   // If in offline mode (or if most recent reading failed to publish),
@@ -182,7 +230,8 @@ bool record_weather_reading(const weather_reading_t *reading) {
     return true;
   }
 
-  return false; // IDK how you could possibly reach here
+  Serial.println("How did you manage to get here???");
+  return false;
 }
 
 bool record_lightning_event(const lightn_event_t *event) {
@@ -352,18 +401,11 @@ void setup() {
   Serial.print("Node ID: ");
   Serial.println(config["id"].as<int>());
 
-  File certCA = SPIFFS.open(config["aws-cert-ca"].as<const char*>());
-  File certCRT = SPIFFS.open(config["aws-cert-crt"].as<const char*>());
-  File certPrivate = SPIFFS.open(config["aws-cert-private"].as<const char*>());
-  AWS_CERT_CA = certCA.readString().c_str();
-  AWS_CERT_CRT = certCRT.readString().c_str();
-  AWS_CERT_PRIVATE = certPrivate.readString().c_str();
-
   connectAWS();
 
-  Serial.println("Setting up!\n");
-
   publish_backlog();
+
+  Serial.println("Setting up!\n");
 
   if (! bme.begin(0x77, &Wire)) {
     Serial.println("Could not find a valid BME280 sensor, check wiring!");
@@ -419,10 +461,10 @@ void loop() {
       Serial.println(intVal);
     }
   } else {
-    //take_reading();
+    take_reading();
   }
   //Serial.println("Looped\n");
   
   //print_hw_debug();
-  delay(100);
+  delay(1000);
 }
