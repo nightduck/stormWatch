@@ -5,8 +5,8 @@
 #include "WiFi.h"
 
 // The MQTT topics that this device should publish/subscribe
-#define AWS_IOT_PUBLISH_TOPIC   "storm_watch/pub"
-#define AWS_IOT_SUBSCRIBE_TOPIC "storm_watch/sub"
+#define AWS_IOT_PUBLISH_TOPIC   "$aws/things/storm_watch/shadow/update"
+#define AWS_IOT_SUBSCRIBE_TOPIC "$aws/things/storm_watch/shadow/update"
 
 WiFiClientSecure net = WiFiClientSecure();
 MQTTClient client = MQTTClient(256);
@@ -61,11 +61,15 @@ void connectAWS()
 
 void publishMessage()
 {
-  StaticJsonDocument<200> doc;
-  doc["time"] = millis();
-  doc["sensor_a0"] = analogRead(0);
+  StaticJsonDocument<128> jsonDoc;
+  JsonObject stateObj = jsonDoc.createNestedObject("state");
+  JsonObject reportedObj = stateObj.createNestedObject("reported");
+  
+  reportedObj["temperature"] = 23.76;
+  reportedObj["humidity"] = 78.12;
+  
   char jsonBuffer[512];
-  serializeJson(doc, jsonBuffer); // print to client
+  serializeJson(jsonDoc, jsonBuffer); // print to client
 
   client.publish(AWS_IOT_PUBLISH_TOPIC, jsonBuffer);
 }
