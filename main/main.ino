@@ -9,7 +9,6 @@
 #include <WiFiClientSecure.h>
 #include <MQTTClient.h>
 #include <ArduinoJson.h>
-#include "secrets.h"
 #include "WiFi.h"
 
 #define COUNTER_0 25
@@ -60,7 +59,7 @@ typedef struct lightn_reading {
   time_t timestamp;
 } lightn_event_t;
 
-StaticJsonDocument<256> config;
+StaticJsonDocument<768> config;
 bool online;
 
 Adafruit_BME280 bme;
@@ -68,9 +67,9 @@ SparkFun_AS3935 lightning;
 bool sawLightning;
 bool factoryReset;
 
-// const char * AWS_CERT_CA;
-// const char * AWS_CERT_CRT;
-// const char * AWS_CERT_PRIVATE;
+char AWS_CERT_CA[1280];
+char AWS_CERT_CRT[1280];
+char AWS_CERT_PRIVATE[1792];
 
 WiFiClientSecure net = WiFiClientSecure();
 MQTTClient client = MQTTClient(256);
@@ -87,7 +86,7 @@ void connectToWiFi()
 {
   //WiFi.mode(WIFI_STA);
   // TODO: Error handling with the keys. Fallback to offline mode if failed
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.begin(config["wifi_ssid"].as<const char *>(), config["wifi_password"].as<const char *>());
 
   Serial.println("Connecting to Wi-Fi");
 
@@ -100,30 +99,40 @@ void connectToWiFi()
 
 void connectAWS()
 {
-  // Serial.println("Reading certs from memory");
-  // // Load in AWS certs and keys from flash
-  // const char * filename = config["aws-cert-ca"].as<const char*>();
-  // Serial.println("FILENAME: ");
-  // Serial.println(filename);
-  // File certCA = SPIFFS.open("/708ec0abd2-ca_root1.pem", FILE_READ);
-  // File certCRT = SPIFFS.open("/708ec0abd2-certificate.pem.crt", FILE_READ);
-  // File certPrivate = SPIFFS.open("/708ec0abd2-private.pem.key", FILE_READ);
-  // if (!certCA || !certCRT || !certPrivate) {
-  //   Serial.println("AWS files not found in flash! Can't find: ");
-  //   Serial.println(config["aws-cert-ca"].as<const char*>());
-  //   Serial.println(config["aws-cert-crt"].as<const char*>());
-  //   Serial.println(config["aws-cert-private"].as<const char*>());
-  //   while(true);
-  // }
-  // // AWS_CERT_CA = certCA.readString().c_str();
-  // // AWS_CERT_CRT = certCRT.readString().c_str();
-  // // AWS_CERT_PRIVATE = certPrivate.readString().c_str();
-  // certCA.close();
-  // certCRT.close();
-  // certPrivate.close();
-  // delay(2000);
-  // Serial.println("Public Key");
-  // Serial.println(AWS_CERT_CA);
+  // Load in AWS certs and keys from flash
+  Serial.println("Reading certs from memory");
+  File certCA = SPIFFS.open(config["aws_cert_ca"].as<const char*>(), FILE_READ);
+  File certCRT = SPIFFS.open(config["aws_cert_crt"].as<const char*>(), FILE_READ);
+  File certPrivate = SPIFFS.open(config["aws_cert_private"].as<const char*>(), FILE_READ);
+  if (!certCA || !certCRT || !certPrivate) {
+    Serial.println("HALTING!!! AWS files not found in flash! Can't find: ");
+    Serial.println(config["aws_cert_ca"].as<const char*>());
+    Serial.println(config["aws_cert_crt"].as<const char*>());
+    Serial.println(config["aws_cert_private"].as<const char*>());
+    while(true);
+  }
+
+  String temp = "";
+  while (certCA.available()) {
+    temp += certCA.readString();
+  }
+  strcpy(AWS_CERT_CA, temp.c_str());
+
+  temp = "";
+  while (certCRT.available()) {
+    temp += certCRT.readString();
+  }
+  strcpy(AWS_CERT_CRT, temp.c_str());
+
+  temp = "";
+  while (certPrivate.available()) {
+    temp += certPrivate.readString();
+  }
+  strcpy(AWS_CERT_PRIVATE, temp.c_str());
+
+  certCA.close();
+  certCRT.close();
+  certPrivate.close();
 
   connectToWiFi();
   
@@ -133,14 +142,14 @@ void connectAWS()
   net.setPrivateKey(AWS_CERT_PRIVATE);
 
   // Connect to the MQTT broker on the AWS endpoint we defined earlier
-  client.begin(AWS_IOT_ENDPOINT, 8883, net);
+  client.begin(config["aws_iot_endpoint"].as<const char*>(), 8883, net);
 
   // Create a message handler
   client.onMessage(messageHandler);
 
   Serial.print("Connecting to AWS IOT");
 
-  while (!client.connect(THINGNAME)) {
+  while (!client.connect(config["thingname"].as<const char*>())) {
     Serial.print(".");
     delay(100);
   }
@@ -353,7 +362,7 @@ void setup() {
 
   // Check config file exists
   if (!SPIFFS.exists("/config")) {
-    Serial.println("Config file not present! Halting!");
+    Serial.println("HALTING!!! Config file not present!");
     while(true);
   }
 
@@ -379,15 +388,15 @@ void setup() {
     Serial.println ("Lightning Detector did not start up, freezing!"); 
     while(1); 
   }
-  lightning.maskDisturber((bool)config["mask-disturber"]);
+  lightning.maskDisturber((bool)config["mask_disturber"]);
   if (config["indoor"])
     lightning.setIndoorOutdoor(INDOOR);
   else
     lightning.setIndoorOutdoor(OUTDOOR);
-  lightning.setNoiseLevel(config["noise-level"]);
-  lightning.spikeRejection(config["spike-rejection"]);
-  lightning.lightningThreshold(config["lightning-threshold"]);
-  lightning.watchdogThreshold(config["watchdog-threshold"]);
+  lightning.setNoiseLevel(config["noise_level"]);
+  lightning.spikeRejection(config["spike_rejection"]);
+  lightning.lightningThreshold(config["lightning_threshold"]);
+  lightning.watchdogThreshold(config["watchdog_threshold"]);
   lightning.clearStatistics(true);
   sawLightning = false;
   attachInterrupt(LIGHTN_INT, LIGHTN_ISR, HIGH);
