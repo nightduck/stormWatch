@@ -43,8 +43,8 @@
 #define LIGHTNING_FILENAME "/lightning_events"
 
 // The MQTT topics that this device should publish/subscribe
-#define AWS_IOT_PUBLISH_TOPIC   "esp32/pub"
-#define AWS_IOT_SUBSCRIBE_TOPIC "esp32/sub"
+#define AWS_IOT_PUBLISH_TOPIC   "$aws/things/storm_watch/shadow/update"
+#define AWS_IOT_SUBSCRIBE_TOPIC "$aws/things/storm_watch/shadow/update"
 
 typedef struct weather_reading {
   float temp;
@@ -198,15 +198,19 @@ void print_hw_debug() {
 bool record_weather_reading(const weather_reading_t *reading) {
   // If in online mode, publish to cloud
   if (online) {
-    StaticJsonDocument<256> json;
-    json["temp"] = reading->temp;
-    json["pressure"] = reading->pressure;
-    json["humidity"] = reading->humidity;
-    json["wind_direction"] = reading->wind_direction;
-    json["wind_speed"] = reading->wind_speed;
-    json["rainfall_mm"] = reading->rainfall_mm;
+    StaticJsonDocument<256> jsonDoc;
+    JsonObject stateObj = jsonDoc.createNestedObject("state");
+    JsonObject reportedObj = stateObj.createNestedObject("reported");
+    reportedObj["temp"] = reading->temp;
+    reportedObj["pressure"] = reading->pressure;
+    reportedObj["humidity"] = reading->humidity;
+    reportedObj["wind_direction"] = reading->wind_direction;
+    reportedObj["wind_speed"] = reading->wind_speed;
+    reportedObj["rainfall_mm"] = reading->rainfall_mm;
     char jsonBuffer[256];
-    serializeJson(json, jsonBuffer);
+    serializeJson(jsonDoc, jsonBuffer);
+    Serial.println(jsonBuffer);
+
     if(!client.publish(AWS_IOT_PUBLISH_TOPIC, jsonBuffer)) {
       online = false;
     } else
@@ -215,7 +219,7 @@ bool record_weather_reading(const weather_reading_t *reading) {
       return true;
     }
   }
-  Serial.println("Recording weather reading");
+
   // If in offline mode (or if most recent reading failed to publish),
   // save to flash
   if (!online) {
@@ -227,6 +231,8 @@ bool record_weather_reading(const weather_reading_t *reading) {
       return false;
     }
 
+    Serial.println("Saved reading to flash");
+    online = true;
     return true;
   }
 
@@ -275,30 +281,7 @@ bool publish_backlog() {
 
   weather_reading_t reading;
   while(weather.read((uint8_t*)&reading, sizeof(weather_reading_t)) != 0) {
-    // TODO: Replace this with WiFi upload
-    Serial.print("Temperature = ");
-    Serial.print(reading.temp);
-    Serial.println(" *C");
-
-    Serial.print("Pressure = ");
-    Serial.print(reading.pressure);
-    Serial.println(" hPa");
-
-    Serial.print("Humidity = ");
-    Serial.print(reading.humidity);
-    Serial.println(" %");
-
-    Serial.print("Rainfall = ");
-    Serial.print(reading.rainfall_mm);
-    Serial.println(" mm");
-
-    Serial.print("Wind direction = ");
-    Serial.println(reading.wind_direction);
-
-    Serial.print("Humidity = ");
-    Serial.print(reading.wind_speed);
-    Serial.println(" kmh");
-    Serial.println();
+    record_weather_reading(&reading);
   };
 
   lightn_event_t event;
@@ -321,27 +304,6 @@ void take_reading() {
   reading.temp = bme.readTemperature();
   reading.pressure = bme.readPressure() / 100.0F;
   reading.humidity = bme.readHumidity();
-
-  int count = read_counter();
-  reset_counter();
-  Serial.print("Counter = ");
-  Serial.println(count);
-  
-  Serial.print("Temperature = ");
-  Serial.print(reading.temp);
-  Serial.println(" *C");
-
-  Serial.print("Pressure = ");
-  Serial.print(reading.pressure);
-  Serial.println(" hPa");
-
-  Serial.print("Approx. Altitude = ");
-  Serial.print(bme.readAltitude(SEALEVELPRESSURE_HPA));
-  Serial.println(" m");
-
-  Serial.print("Humidity = ");
-  Serial.print(reading.humidity);
-  Serial.println(" %");
 
   if (!record_weather_reading(&reading)) {
     Serial.println("FAILED TO SAVE DATA. ABORTING");
@@ -466,5 +428,5 @@ void loop() {
   //Serial.println("Looped\n");
   
   //print_hw_debug();
-  delay(1000);
+  delay(5000);
 }
