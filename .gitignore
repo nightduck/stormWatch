@@ -6,10 +6,6 @@
 .vscode/launch.json
 .vscode/ipch
 .vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
 *.code-workspace
 
 # Pycharm
@@ -33,4 +29,6 @@ fabric.properties
 *.crt
 *.key
 data
+!data/config.json
 include/secrets.h
+*.zip

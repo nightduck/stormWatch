@@ -37,7 +37,7 @@
 #define DISTURBER_INT 0x04
 #define NOISE_INT 0x01
 
-#define CONFIG_FILENAME "/config"
+#define CONFIG_FILENAME "/config.json"
 #define WEATHER_FILENAME "/weather_readings"
 #define LIGHTNING_FILENAME "/lightning_events"
 
@@ -361,13 +361,13 @@ void setup() {
   }
 
   // Check config file exists
-  if (!SPIFFS.exists("/config")) {
+  if (!SPIFFS.exists(CONFIG_FILENAME)) {
     Serial.println("HALTING!!! Config file not present!");
     while(true);
   }
 
   Serial.println("Reading configuration");
-  File fin = SPIFFS.open("/config");
+  File fin = SPIFFS.open(CONFIG_FILENAME);
   deserializeJson(config, fin);
   Serial.print("Node ID: ");
   Serial.println(config["id"].as<int>());
