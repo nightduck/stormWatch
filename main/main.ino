@@ -11,22 +11,21 @@
 #include <ArduinoJson.h>
 #include "WiFi.h"
 
-#define COUNTER_0 25
-#define COUNTER_1 26
-#define COUNTER_2 12
-#define COUNTER_3 27
-#define COUNTER_4 33
-#define COUNTER_5 15
-#define COUNTER_6 32
-#define COUNTER_7 14
-#define COUNTER_RST 34
-#define LIGHTN_INT 4
-#define ANEM_INT 36
-#define WEATHER_VANE 39 
-#define LIGHTN_CS 21     // Bogus pin, since CS is tied low
-//#define FACTORY_RESET 21
-#define BATT 35
-#define LED 13
+#define COUNTER_0 GPIO_NUM_25
+#define COUNTER_1 GPIO_NUM_26
+#define COUNTER_2 GPIO_NUM_12
+#define COUNTER_3 GPIO_NUM_27
+#define COUNTER_4 GPIO_NUM_33
+#define COUNTER_5 GPIO_NUM_15
+#define COUNTER_6 GPIO_NUM_32
+#define COUNTER_7 GPIO_NUM_14
+#define COUNTER_RST GPIO_NUM_34
+#define LIGHTN_INT GPIO_NUM_4
+#define ANEM_INT GPIO_NUM_36
+#define WEATHER_VANE GPIO_NUM_39 
+#define LIGHTN_CS GPIO_NUM_21
+#define BATT GPIO_NUM_35
+#define LED GPIO_NUM_13
 #define SEALEVELPRESSURE_HPA 1013.25
 #define FLASH_START 32
 #define CONFIG_ADDR 0
@@ -42,8 +41,8 @@
 #define LIGHTNING_FILENAME "/lightning_events"
 
 // The MQTT topics that this device should publish/subscribe
-#define AWS_IOT_PUBLISH_TOPIC   "$aws/things/storm_watch/shadow/update"
-#define AWS_IOT_SUBSCRIBE_TOPIC "$aws/things/storm_watch/shadow/update"
+#define AWS_IOT_PUBLISH_TOPIC   "test/testing"
+#define AWS_IOT_SUBSCRIBE_TOPIC "test/testing"
 
 typedef struct weather_reading {
   float temp;
@@ -216,6 +215,7 @@ bool record_weather_reading(const weather_reading_t *reading) {
     reportedObj["wind_direction"] = reading->wind_direction;
     reportedObj["wind_speed"] = reading->wind_speed;
     reportedObj["rainfall_mm"] = reading->rainfall_mm;
+    reportedObj["battery"] = readBattery();
     char jsonBuffer[256];
     serializeJson(jsonDoc, jsonBuffer);
     Serial.println(jsonBuffer);
@@ -326,16 +326,6 @@ void IRAM_ATTR LIGHTN_ISR() {
 }
 
 void setup() {
-  Serial.begin(115200);
-  delay(500);
-  Serial.println("Serial initialized");
-
-  // Serial.println("Awaken get ready...");
-  // for(int i = 0; i < 10; i++) {
-  //   Serial.println(i);
-  //   delay(1000);
-  // }
-
   pinMode(LED, OUTPUT);
   pinMode(COUNTER_0, INPUT);
   pinMode(COUNTER_1, INPUT);
@@ -347,7 +337,18 @@ void setup() {
   pinMode(COUNTER_7, INPUT);
   pinMode(COUNTER_RST, OUTPUT);
   pinMode(LIGHTN_INT, INPUT);
-  //pinMode(FACTORY_RESET, INPUT);
+  digitalWrite(LED, 1);
+
+  Serial.begin(115200);
+  delay(500);
+  Serial.println("Serial initialized");
+
+  // Serial.println("Awaken get ready...");
+  // for(int i = 0; i < 10; i++) {
+  //   Serial.println(i);
+  //   delay(1000);
+  // }
+
   online = true;
 
   if (!SPIFFS.begin(true)) {
@@ -388,54 +389,76 @@ void setup() {
     Serial.println ("Lightning Detector did not start up, freezing!"); 
     while(1); 
   }
-  lightning.maskDisturber((bool)config["mask_disturber"]);
-  if (config["indoor"])
+  lightning.maskDisturber((bool)config["mask_disturbers"]);
+  if (config["indoor"]) {
     lightning.setIndoorOutdoor(INDOOR);
-  else
+  } else {
     lightning.setIndoorOutdoor(OUTDOOR);
+  }
   lightning.setNoiseLevel(config["noise_level"]);
   lightning.spikeRejection(config["spike_rejection"]);
   lightning.lightningThreshold(config["lightning_threshold"]);
   lightning.watchdogThreshold(config["watchdog_threshold"]);
   lightning.clearStatistics(true);
+
+  char jsonBuffer[1024];
+  serializeJson(config, jsonBuffer);
+  Serial.println(jsonBuffer);
+
   sawLightning = false;
   attachInterrupt(LIGHTN_INT, LIGHTN_ISR, HIGH);
+  gpio_wakeup_enable(LIGHTN_INT, GPIO_INTR_HIGH_LEVEL);
+
+  esp_sleep_enable_timer_wakeup(5000000);
+  esp_sleep_enable_gpio_wakeup();
 }
 
 void loop() {
-  if (digitalRead(LIGHTN_INT)) {
-    sawLightning = false;
-    Serial.println("Lightning interrupt recieved");
-    delay(2);
-    int intVal = lightning.readInterruptReg();
+  digitalWrite(LED, 1);
+  esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+  switch(wakeup_reason) {
+    case ESP_SLEEP_WAKEUP_GPIO:
+      Serial.println("Wokeup because lightning");
+      if (digitalRead(LIGHTN_INT)) {
+        sawLightning = false;
+        Serial.println("Lightning interrupt recieved");
+        delay(2);
+        int intVal = lightning.readInterruptReg();
 
-    if (intVal == NOISE_INT) {
-      Serial.println("Noise.");
-    } else if (intVal == DISTURBER_INT) {
-      Serial.println("Disturber.");
-    } else if (intVal == LIGHTNING_INT) {
-      Serial.println("Lightning Strike Detected!");
-      // Lightning! Now how far away is it? Distance estimation takes into
-      // account previously seen events.
-      byte distance = lightning.distanceToStorm();
-      Serial.print("Approximately: ");
-      Serial.print(distance);
-      Serial.println("km away!");
+        if (intVal == NOISE_INT) {
+          Serial.println("Noise.");
+        } else if (intVal == DISTURBER_INT) {
+          Serial.println("Disturber.");
+        } else if (intVal == LIGHTNING_INT) {
+          Serial.println("Lightning Strike Detected!");
+          // Lightning! Now how far away is it? Distance estimation takes into
+          // account previously seen events.
+          byte distance = lightning.distanceToStorm();
+          Serial.print("Approximately: ");
+          Serial.print(distance);
+          Serial.println("km away!");
 
-      // "Lightning Energy" and I do place into quotes intentionally, is a pure
-      // number that does not have any physical meaning.
-      long lightEnergy = lightning.lightningEnergy();
-      Serial.print("Lightning Energy: ");
-      Serial.println(lightEnergy);
-    } else {
-      Serial.print("Interrupt value: ");
-      Serial.println(intVal);
-    }
-  } else {
-    take_reading();
+          // "Lightning Energy" and I do place into quotes intentionally, is a pure
+          // number that does not have any physical meaning.
+          long lightEnergy = lightning.lightningEnergy();
+          Serial.print("Lightning Energy: ");
+          Serial.println(lightEnergy);
+        } else {
+          Serial.print("Interrupt value: ");
+          Serial.println(intVal);
+        }
+      }
+      break;
+    case ESP_SLEEP_WAKEUP_TIMER:
+      Serial.println("Wokeup because timer");
+      take_reading();
+      break;
+    default:
+      Serial.println("Default");
   }
-  //Serial.println("Looped\n");
   
   //print_hw_debug();
-  delay(5000);
+  usleep(20000);
+  digitalWrite(LED, 0);
+  esp_light_sleep_start();
 }

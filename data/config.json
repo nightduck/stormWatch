@@ -1,6 +1,6 @@
 {
     "id" : 4,
-    "mask-disturbers" : true,
+    "mask_disturbers" : true,
     "indoor" : true,
     "noise_level" : 1,
     "spike_rejection" : 1,
