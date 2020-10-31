@@ -32,3 +32,5 @@ data
 !data/config.json
 include/secrets.h
 *.zip
+venv
+venv3

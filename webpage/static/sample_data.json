@@ -1,0 +1,44 @@
+{
+  "nodes" : [
+    {
+      "nodename" : "node01",
+      "coordinates" : [38.635105,-90.347663],
+      "temp" : 25.4,
+      "pressure" : 1004.23,
+      "humidity": 11.4,
+      "rainfall" : 0,
+      "wind_direction" : "NNW",
+      "wind_speed" : 3.6
+    },
+    {
+      "nodename" : "node02",
+      "coordinates" : [38.639946,-90.293985]
+    },
+    {
+      "nodename" : "node03",
+      "coordinates" : [38.749572,-90.370141]
+    },
+    {
+      "nodename" : "node03",
+      "coordinates" : [38.562107,-90.264256]
+    },
+    {
+      "nodename" : "node03",
+      "coordinates" : [38.624607,-90.184972]
+    }
+  ],
+  "lightning" : [
+    {
+      "coordinates" : [38.669483,-90.245985],
+      "time" : "2020-11-10T13:45:00.00Z"
+    },
+    {
+      "coordinates" : [38.731483,-90.325985],
+      "time" : "2020-11-10T13:46:00.00Z"
+    },
+    {
+      "coordinates" : [38.670483,-90.195985],
+      "time" : "2020-11-10T13:47:00.00Z"
+    }
+  ]
+}
