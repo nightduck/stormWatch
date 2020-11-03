@@ -41,6 +41,7 @@
 #define LIGHTNING_FILENAME "/lightning_events"
 
 // The MQTT topics that this device should publish/subscribe
+#define CONFIG_TOPIC_LEADER "config/"
 #define AWS_IOT_PUBLISH_TOPIC   "test/testing"
 #define AWS_IOT_SUBSCRIBE_TOPIC "test/testing"
 
@@ -73,12 +74,13 @@ char AWS_CERT_PRIVATE[1792];
 WiFiClientSecure net = WiFiClientSecure();
 MQTTClient client = MQTTClient(256);
 
-void messageHandler(String &topic, String &payload) {
-  Serial.println("incoming: " + topic + " - " + payload);
-
-//  StaticJsonDocument<200> doc;
-//  deserializeJson(doc, payload);
-//  const char* message = doc["message"];
+void downloadNewConfig(String &topic, String &payload) {
+  Serial.println("Got message!");
+  StaticJsonDocument<256> jsonDoc;
+  deserializeJson(jsonDoc, payload);
+  char jsonBuffer[256];
+  serializeJson(jsonDoc["state"]["reported"], jsonBuffer);
+  Serial.println(jsonBuffer);
 }
 
 void connectToWiFi()
@@ -94,6 +96,29 @@ void connectToWiFi()
     Serial.print(".");
   }
   Serial.println("Connected to Wi-Fi");
+}
+
+void connectMQTT() {
+  // Connect to the MQTT broker on the AWS endpoint we defined earlier
+  client.begin(config["aws_iot_endpoint"].as<const char*>(), 8883, net);
+
+  // Create a message handler
+  client.onMessage(downloadNewConfig);
+
+  Serial.print("Connecting to AWS IOT");
+
+  while (!client.connect(config["thingname"].as<const char*>())) {
+    Serial.print(".");
+    delay(100);
+  }
+
+  if(!client.connected()){
+    Serial.println("AWS IoT Timeout!");
+    return;
+  }
+
+  // Subscribe to a topic
+  client.subscribe("config/node01");
 }
 
 void connectAWS()
@@ -116,18 +141,24 @@ void connectAWS()
     temp += certCA.readString();
   }
   strcpy(AWS_CERT_CA, temp.c_str());
+  Serial.println(AWS_CERT_CA);
+  delay(500);
 
   temp = "";
   while (certCRT.available()) {
     temp += certCRT.readString();
   }
   strcpy(AWS_CERT_CRT, temp.c_str());
+  Serial.println(AWS_CERT_CRT);
+  delay(500);
 
   temp = "";
   while (certPrivate.available()) {
     temp += certPrivate.readString();
   }
   strcpy(AWS_CERT_PRIVATE, temp.c_str());
+  Serial.println(AWS_CERT_PRIVATE);
+  delay(500);
 
   certCA.close();
   certCRT.close();
@@ -140,26 +171,7 @@ void connectAWS()
   net.setCertificate(AWS_CERT_CRT);
   net.setPrivateKey(AWS_CERT_PRIVATE);
 
-  // Connect to the MQTT broker on the AWS endpoint we defined earlier
-  client.begin(config["aws_iot_endpoint"].as<const char*>(), 8883, net);
-
-  // Create a message handler
-  client.onMessage(messageHandler);
-
-  Serial.print("Connecting to AWS IOT");
-
-  while (!client.connect(config["thingname"].as<const char*>())) {
-    Serial.print(".");
-    delay(100);
-  }
-
-  if(!client.connected()){
-    Serial.println("AWS IoT Timeout!");
-    return;
-  }
-
-  // Subscribe to a topic
-  client.subscribe(AWS_IOT_SUBSCRIBE_TOPIC);
+  connectMQTT();
 
   Serial.println("AWS IoT Connected!");
 }
@@ -415,6 +427,13 @@ void setup() {
 
 void loop() {
   digitalWrite(LED, 1);
+  client.loop();
+  if (!client.connected()) {
+    Serial.println("Reconnecting...");
+    connectMQTT();
+    // TODO: Publish backlog here
+  }
+
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
   switch(wakeup_reason) {
     case ESP_SLEEP_WAKEUP_GPIO:
@@ -458,7 +477,9 @@ void loop() {
   }
   
   //print_hw_debug();
-  usleep(20000);
+
+  delay(20);
   digitalWrite(LED, 0);
   esp_light_sleep_start();
+  //delay(5000);
 }
