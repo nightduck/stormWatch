@@ -3,6 +3,8 @@
 #include "Wire.h"
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
+#include "esp_bt.h"
+#include "esp_pm.h"
 #include "SPIFFS.h"
 #include "Adafruit_BME280.h"
 #include "SparkFun_AS3935.h"
@@ -39,11 +41,13 @@
 #define CONFIG_FILENAME "/config.json"
 #define WEATHER_FILENAME "/weather_readings"
 #define LIGHTNING_FILENAME "/lightning_events"
+#define WEATHER_FILENAME_TEMP "/weather_readings.tmp"
+#define LIGHTNING_FILENAME_TEMP "/lightning_events.tmp"
 
 // The MQTT topics that this device should publish/subscribe
 #define CONFIG_TOPIC_LEADER "config/"
-#define AWS_IOT_PUBLISH_TOPIC   "test/testing"
-#define AWS_IOT_SUBSCRIBE_TOPIC "test/testing"
+#define WEATHER_PUB_TOPIC   "node01/weather"
+#define LIGHTNING_PUB_TOPIC   "node01/lightning"
 
 typedef struct weather_reading {
   float temp;
@@ -118,7 +122,7 @@ void connectMQTT() {
   }
 
   // Subscribe to a topic
-  client.subscribe("config/node01");
+  client.subscribe("config/node01", 1);
 }
 
 void connectAWS()
@@ -203,6 +207,8 @@ float readBattery() {
 void print_hw_debug() {
   Serial.print("Free heap: ");
   Serial.println(ESP.getFreeHeap());
+  Serial.print("Heap size: ");
+  Serial.println(ESP.getHeapSize());
   Serial.print("Free psram: ");
   Serial.println(ESP.getFreePsram());
   Serial.print("Free sketch space: ");
@@ -232,8 +238,9 @@ bool record_weather_reading(const weather_reading_t *reading) {
     serializeJson(jsonDoc, jsonBuffer);
     Serial.println(jsonBuffer);
 
-    if(!client.publish(AWS_IOT_PUBLISH_TOPIC, jsonBuffer)) {
-      online = false;
+    if(!client.publish(WEATHER_PUB_TOPIC, jsonBuffer, false, 1)) {
+      Serial.println("Failed to publish");
+      //online = false;
     } else
     {
       Serial.println("Published reading");
@@ -243,22 +250,16 @@ bool record_weather_reading(const weather_reading_t *reading) {
 
   // If in offline mode (or if most recent reading failed to publish),
   // save to flash
-  if (!online) {
-    File weather = SPIFFS.open(WEATHER_FILENAME, FILE_APPEND);
-    if (!weather) {
-      return false;
-    }
-    if (weather.write((uint8_t*)reading, sizeof(weather_reading_t)) < sizeof(weather_reading_t)) {
-      return false;
-    }
-
-    Serial.println("Saved reading to flash");
-    online = true;
-    return true;
+  File weather = SPIFFS.open(WEATHER_FILENAME, FILE_APPEND);
+  if (!weather) {
+    return false;
+  }
+  if (weather.write((uint8_t*)reading, sizeof(weather_reading_t)) < sizeof(weather_reading_t)) {
+    return false;
   }
 
-  Serial.println("How did you manage to get here???");
-  return false;
+  Serial.println("Saved reading to flash");
+  return true;
 }
 
 bool record_lightning_event(const lightn_event_t *event) {
@@ -286,8 +287,9 @@ bool record_lightning_event(const lightn_event_t *event) {
 
 bool publish_backlog() {
   Serial.println("Inspecting offline backlog");
-
-  File weather = SPIFFS.open(WEATHER_FILENAME, FILE_READ);
+  SPIFFS.rename(WEATHER_FILENAME, WEATHER_FILENAME_TEMP);
+  SPIFFS.rename(LIGHTNING_FILENAME, LIGHTNING_FILENAME_TEMP);
+  File weather = SPIFFS.open(WEATHER_FILENAME_TEMP, FILE_READ);
   File lightning = SPIFFS.open(LIGHTNING_FILENAME, FILE_READ);
   if (!weather || !lightning) {
     Serial.println("Unable to open config files");
@@ -303,6 +305,7 @@ bool publish_backlog() {
   weather_reading_t reading;
   while(weather.read((uint8_t*)&reading, sizeof(weather_reading_t)) != 0) {
     record_weather_reading(&reading);
+    // TODO: Bug where if online fails, then recordings are doubled
   };
 
   lightn_event_t event;
@@ -315,8 +318,8 @@ bool publish_backlog() {
     Serial.print(event.timestamp);
   }
 
-  SPIFFS.remove(WEATHER_FILENAME);
-  SPIFFS.remove(LIGHTNING_FILENAME);
+  SPIFFS.remove(WEATHER_FILENAME_TEMP);
+  SPIFFS.remove(LIGHTNING_FILENAME_TEMP);
   return true;
 }
 
@@ -421,17 +424,36 @@ void setup() {
   attachInterrupt(LIGHTN_INT, LIGHTN_ISR, HIGH);
   gpio_wakeup_enable(LIGHTN_INT, GPIO_INTR_HIGH_LEVEL);
 
-  esp_sleep_enable_timer_wakeup(5000000);
+  // Turn off bluetooth
+  esp_bt_controller_disable();
+
+#ifndef CONFIG_PM_ENABLE
+#error "CONFIG_PM_ENABLE missing"
+#endif
+    // esp_pm_config_esp32_t pm_config;
+    // pm_config.max_freq_mhz = 80;
+    // pm_config.min_freq_mhz = 13;
+    // pm_config.light_sleep_enable = false;
+    // ESP_ERROR_CHECK( esp_pm_configure(&pm_config) );
+
+  esp_sleep_enable_timer_wakeup(300000000);
   esp_sleep_enable_gpio_wakeup();
 }
 
 void loop() {
   digitalWrite(LED, 1);
-  client.loop();
-  if (!client.connected()) {
-    Serial.println("Reconnecting...");
-    connectMQTT();
-    // TODO: Publish backlog here
+  if (online) {
+    client.loop();
+    if (!client.connected()) {
+      Serial.println("Reconnecting...");
+      if (WiFi.isConnected()) {
+        Serial.println("Wifi still connected");
+      } else {
+        Serial.println("Wifi not connected");
+      }
+      connectMQTT();
+      publish_backlog();
+    }
   }
 
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
@@ -476,10 +498,9 @@ void loop() {
       Serial.println("Default");
   }
   
-  //print_hw_debug();
+  print_hw_debug();
 
   delay(20);
   digitalWrite(LED, 0);
   esp_light_sleep_start();
-  //delay(5000);
 }
