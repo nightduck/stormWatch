@@ -4,6 +4,7 @@
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
 #include "esp_bt.h"
+#include "esp_wifi.h"
 #include "esp_pm.h"
 #include "SPIFFS.h"
 #include "Adafruit_BME280.h"
@@ -46,12 +47,14 @@
 #define LIGHTNING_FILENAME_TEMP "/lightning_events.tmp"
 
 // The MQTT topics that this device should publish/subscribe
-#define CONFIG_TOPIC_LEADER "config/"
-#define WEATHER_PUB_TOPIC   "node01/weather"
-#define LIGHTNING_PUB_TOPIC   "node01/lightning"
+#define CONFIG_TOPIC        "config/" + NODENAME
+#define WEATHER_PUB_TOPIC   "sensor/" + NODENAME + "/weather"
+#define LIGHTNING_PUB_TOPIC "sensor/" + NODENAME + "/lightning"
+
+String NODENAME;
 
 int WAKING_PERIOD;  // Number of seconds between weather readings
-int RETRIES = 10;   // Number of retries when connecting MQTT client
+int RETRIES = 4;   // Number of retries when connecting MQTT client
 
 typedef struct weather_reading {
   float temp;
@@ -85,9 +88,6 @@ char AWS_CERT_PRIVATE[1792];
 WiFiClientSecure net = WiFiClientSecure();
 MQTTClient client = MQTTClient(256);
 
-time_t startTime;
-ulong startTimems;
-
 void downloadNewConfig(String &topic, String &payload) {
   Serial.println("Got message!");
   StaticJsonDocument<256> jsonDoc;
@@ -98,14 +98,13 @@ void downloadNewConfig(String &topic, String &payload) {
 }
 
 String getTimeStampString() {
-  ulong timems = millis() - startTimems;
-  time_t t = timems / 1000 + startTime;
+  time_t t = now();
 
   tmElements_t tm;
   breakTime(t, tm);
   char timestamp[25];
 
-  sprintf(timestamp, "%d-%02d-%02dT%02d:%02d:%02d.%03dZ", 1970 + tm.Year, tm.Month, tm.Day, tm.Hour, tm.Minute, tm.Second, timems % 1000);
+  sprintf(timestamp, "%d-%02d-%02dT%02d:%02d:%02d.%03dZ", 1970 + tm.Year, tm.Month, tm.Day, tm.Hour, tm.Minute, tm.Second, 0);
   // String timestamp = String(1970 + tm.Year) + "-" + String(tm.Month, 2) + "-" + String(tm.Day, 2)
   //     + "T" + String(tm.Hour) + ":" + String(tm.Minute, 2) + ":" + String(tm.Second, 2)
   //     + "." + String(timems % 1000, 3) + "Z";
@@ -113,11 +112,16 @@ String getTimeStampString() {
   return timestamp;
 }
 
-time_t getTimestamp() {
-  ulong timems = millis() - startTimems;
-  time_t t = timems / 1000 + startTime;
-
-  return t;
+void syncTime() {
+  // Connect to NTP server and set time
+  configTime(0, 0, "time-c-wwv.nist.gov", "time.google.com", "pool.ntp.org");
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    Serial.println("HALTING!!! Can't get NTP time");
+    while(true);
+  }
+  setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
+          timeinfo.tm_mday, timeinfo.tm_mon+1,timeinfo.tm_year - 100); // <--- set internal RTC
 }
 
 void connectToWiFi()
@@ -160,13 +164,12 @@ bool connectMQTT() {
   }
 
   // Subscribe to a topic
-  client.subscribe("config/node01", 1);
+  client.subscribe(CONFIG_TOPIC, 1);
 
   return true;
 }
 
-bool connectAWS()
-{
+void loadCerts() {
   // Load in AWS certs and keys from flash
   Serial.println("Reading certs from memory");
   File certCA = SPIFFS.open(config["aws_cert_ca"].as<const char*>(), FILE_READ);
@@ -207,13 +210,59 @@ bool connectAWS()
   certCA.close();
   certCRT.close();
   certPrivate.close();
-  
+}
+
+bool connectAWS()
+{  
   // Configure WiFiClientSecure to use the AWS IoT device credentials
   net.setCACert(AWS_CERT_CA);
   net.setCertificate(AWS_CERT_CRT);
   net.setPrivateKey(AWS_CERT_PRIVATE);
 
   connectMQTT();
+}
+
+bool reconnectToWifi() {
+  WiFi.reconnect();
+  while (WiFi.status() == WL_IDLE_STATUS || WiFi.status() == WL_DISCONNECTED || WiFi.status() == WL_NO_SHIELD){
+    delay(500);
+    Serial.print(".");
+  }
+  if(WiFi.isConnected()) {
+    connectAWS();
+    syncTime();
+  } else {
+    Serial.println("Wifi not present. Falling back to offline mode.");
+    Serial.print("Wifi status: ");
+    switch(WiFi.status()) {
+      case WL_IDLE_STATUS:
+        Serial.println("WL_IDLE_STATUS");
+        break;
+      case WL_NO_SSID_AVAIL:
+        Serial.println("WL_NO_SSID_AVAIL");
+        break;
+      case WL_SCAN_COMPLETED:
+        Serial.println("WL_SCAN_COMPLETED");
+        break;
+      case WL_CONNECTED:
+        Serial.println("WL_CONNECTED");
+        break;
+      case WL_CONNECT_FAILED:
+        Serial.println("WL_CONNECT_FAILED");
+        break;
+      case WL_CONNECTION_LOST:
+        Serial.println("WL_CONNECTION_LOST");
+        break;
+      case WL_DISCONNECTED:
+        Serial.println("WL_DISCONNECTED");
+        break;
+      default:
+        Serial.println(WiFi.status());
+    }
+    online = false;
+  }
+
+  return online;
 }
 
 int read_counter() {
@@ -338,7 +387,7 @@ bool publish_backlog() {
   SPIFFS.rename(WEATHER_FILENAME, WEATHER_FILENAME_TEMP);
   SPIFFS.rename(LIGHTNING_FILENAME, LIGHTNING_FILENAME_TEMP);
   File weather = SPIFFS.open(WEATHER_FILENAME_TEMP, FILE_READ);
-  File lightning = SPIFFS.open(LIGHTNING_FILENAME, FILE_READ);
+  File lightning = SPIFFS.open(LIGHTNING_FILENAME_TEMP, FILE_READ);
   if (!weather || !lightning) {
     Serial.println("Unable to open config files");
     return false;
@@ -370,7 +419,7 @@ void take_reading() {
   reading.temp = bme.readTemperature();
   reading.pressure = bme.readPressure() / 100.0F;
   reading.humidity = bme.readHumidity();
-  reading.timestamp = getTimestamp();
+  reading.timestamp = now();
   // TODO: More sensors here
 
   if (!record_weather_reading(&reading)) {
@@ -382,6 +431,16 @@ void take_reading() {
 
 void IRAM_ATTR LIGHTN_ISR() {
   sawLightning = true;
+}
+
+void enterSleep() {
+  esp_wifi_stop();
+  digitalWrite(LED, 0);
+  esp_light_sleep_start();    // Spend 5 minutes here
+  digitalWrite(LED, 1);
+  if (esp_wifi_start() != ESP_OK) {
+    Serial.println("Error restarting wifi");
+  }
 }
 
 void setup() {
@@ -427,8 +486,9 @@ void setup() {
   Serial.println("Reading configuration");
   File fin = SPIFFS.open(CONFIG_FILENAME);
   deserializeJson(config, fin);
-  Serial.print("Node ID: ");
-  Serial.println(config["id"].as<int>());
+  Serial.print("Node Name: ");
+  NODENAME = config["thingname"].as<String>();
+  Serial.println(NODENAME);
 
   char jsonBuffer[1024];
   serializeJson(config, jsonBuffer);
@@ -436,21 +496,14 @@ void setup() {
 
   connectToWiFi();
 
-  // Connect to NTP server and set time
-  configTime(0, 0, "pool.ntp.org", "time-c-wwv.nist.gov", "time.google.com");
-  struct tm timeinfo;
-  if (!getLocalTime(&timeinfo)) {
-    Serial.println("HALTING!!! Can't get NTP time");
-    while(true);
-  }
-  setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
-          timeinfo.tm_mday, timeinfo.tm_mon+1,timeinfo.tm_year - 100); // <--- set internal RTC
-  startTimems = millis();
-  startTime = now();  // Store start time, so we never have to call now() again. It uses a while loop instead of modular arithmetic for some fucking reason
+  syncTime();
 
+  loadCerts();
   connectAWS();
 
   publish_backlog();
+
+  client.disconnect();
 
   Serial.println("Setting up!\n");
 
@@ -497,12 +550,13 @@ void setup() {
   secs = 0;
   esp_sleep_enable_timer_wakeup(1000000);   // Take first reading 1sec after setup
   esp_sleep_enable_gpio_wakeup();
-  digitalWrite(LED, 0);
-  esp_light_sleep_start();
 }
 
 void loop() {
-  digitalWrite(LED, 1);
+  enterSleep();   // Turn off LED and WiFi, light sleep for 5 minutes, then turn on LED and WiFi
+
+  time_t timestamp = now();   // Get timestamp immediately, so the delay in connecting to wirless doesn't corrupt it
+  reconnectToWifi();
 
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
   switch(wakeup_reason) {
@@ -523,7 +577,7 @@ void loop() {
 
           lightn_event_t event;
           event.power = lightning.lightningEnergy();
-          event.timestamp = getTimestamp();
+          event.timestamp = timestamp;
 
           if (!record_lightning_event(&event)) {
             Serial.println("FAILED TO SAVE DATA. ABORTING");
@@ -552,46 +606,19 @@ void loop() {
       break;
     case ESP_SLEEP_WAKEUP_TIMER:
       Serial.println("Wokeup because timer");
-      //if(secs >= WAKING_PERIOD) {
-        take_reading();
-      //   secs = 0;
-      // }
-      // secs += 10;
+      take_reading();
       break;
     default:
       Serial.println("Default");
   }
 
   if (online) {
-    if(!client.loop()) {
-      Serial.println("Loop failed");
-
-      if (!client.connected()) {
-        Serial.println("Reconnecting to AWS...");
-        if (WiFi.isConnected()) {
-          Serial.println("Wifi still connected");
-        } else {
-          Serial.println("Wifi not connected");
-        }
-        if (connectMQTT())
-          publish_backlog();
-
-        //esp_sleep_enable_timer_wakeup(WAKING_PERIOD * 1000000);
-      }
-
-      // esp_sleep_enable_timer_wakeup((WAKING_PERIOD-secs) * 1000000);
-      // secs = 300;
-    }
-  } else {
-    Serial.println("Offline mode detected. Rebooting");
-    esp_restart();
+    client.loop();
+    client.disconnect();
   }
 
   esp_sleep_enable_timer_wakeup(WAKING_PERIOD * 1000000);
+  delay(20);
   
   //print_hw_debug();
-
-  delay(20);
-  digitalWrite(LED, 0);
-  esp_light_sleep_start();
 }

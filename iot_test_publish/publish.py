@@ -12,7 +12,7 @@ PATH_TO_CERT = "../data/FILENAME.pem.crt"
 PATH_TO_KEY = "../data/FILENAME.pem.key"
 PATH_TO_ROOT = "../data/FILENAME.pem"
 MESSAGE = {"state":{"reported":{"temp":23.54,"pressure":997.5694,"humidity":55.86035,"wind_direction":"NW","wind_speed":4.5,"rainfall_mm":2.3,"battery":3.902637,"timestamp":1605071283}}}
-TOPIC = "THINGNAME/weather"
+TOPIC = "sensor/THINGNAME/weather"
 RANGE = 10
 
 myAWSIoTMQTTClient = AWSIoTPyMQTT.AWSIoTMQTTClient(CLIENT_ID)
