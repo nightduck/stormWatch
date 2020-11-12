@@ -56,6 +56,8 @@ String NODENAME;
 int WAKING_PERIOD;  // Number of seconds between weather readings
 int RETRIES = 4;   // Number of retries when connecting MQTT client
 
+bool fullNode;
+
 typedef struct weather_reading {
   float temp;
   float pressure;
@@ -219,7 +221,7 @@ bool connectAWS()
   net.setCertificate(AWS_CERT_CRT);
   net.setPrivateKey(AWS_CERT_PRIVATE);
 
-  connectMQTT();
+  return connectMQTT();
 }
 
 bool reconnectToWifi() {
@@ -313,12 +315,14 @@ bool record_weather_reading(const weather_reading_t *reading) {
     StaticJsonDocument<256> jsonDoc;
     JsonObject stateObj = jsonDoc.createNestedObject("state");
     JsonObject reportedObj = stateObj.createNestedObject("reported");
-    reportedObj["temp"] = reading->temp;
-    reportedObj["pressure"] = reading->pressure;
-    reportedObj["humidity"] = reading->humidity;
-    reportedObj["wind_direction"] = reading->wind_direction;
-    reportedObj["wind_speed"] = reading->wind_speed;
-    reportedObj["rainfall_mm"] = reading->rainfall_mm;
+    if (fullNode) {   // Only report sensor data when you have sensors
+      reportedObj["temp"] = reading->temp;
+      reportedObj["pressure"] = reading->pressure;
+      reportedObj["humidity"] = reading->humidity;
+      reportedObj["wind_direction"] = reading->wind_direction;
+      reportedObj["wind_speed"] = reading->wind_speed;
+      reportedObj["rainfall_mm"] = reading->rainfall_mm;
+    }
     reportedObj["battery"] = readBattery();
     reportedObj["timestamp"] = reading->timestamp;
     char jsonBuffer[256];
@@ -335,13 +339,16 @@ bool record_weather_reading(const weather_reading_t *reading) {
   }
 
   // If in offline mode (or if most recent reading failed to publish),
-  // save to flash
-  File weather = SPIFFS.open(WEATHER_FILENAME, FILE_APPEND);
-  if (!weather) {
-    return false;
-  }
-  if (weather.write((uint8_t*)reading, sizeof(weather_reading_t)) < sizeof(weather_reading_t)) {
-    return false;
+  // save to flash. If lightning-only mode, just skip. We have no need
+  // for node stats that aren't real-time
+  if (fullNode) {
+    File weather = SPIFFS.open(WEATHER_FILENAME, FILE_APPEND);
+    if (!weather) {
+      return false;
+    }
+    if (weather.write((uint8_t*)reading, sizeof(weather_reading_t)) < sizeof(weather_reading_t)) {
+      return false;
+    }
   }
 
   Serial.println("Saved reading to flash");
@@ -416,9 +423,11 @@ bool publish_backlog() {
 
 void take_reading() {
   weather_reading_t reading;
-  reading.temp = bme.readTemperature();
-  reading.pressure = bme.readPressure() / 100.0F;
-  reading.humidity = bme.readHumidity();
+  if (fullNode) {     // If lightning-only nodes, this method is for reporting node stats only
+    reading.temp = bme.readTemperature();
+    reading.pressure = bme.readPressure() / 100.0F;
+    reading.humidity = bme.readHumidity();
+  }
   reading.timestamp = now();
   // TODO: More sensors here
 
@@ -461,12 +470,6 @@ void setup() {
   delay(500);
   Serial.println("Serial initialized");
 
-  // Serial.println("Awaken get ready...");
-  // for(int i = 0; i < 10; i++) {
-  //   Serial.println(i);
-  //   delay(1000);
-  // }
-
   if (!SPIFFS.begin(true)) {
     Serial.println("Could not initialize SPIFFS");
     while (true);
@@ -507,9 +510,13 @@ void setup() {
 
   Serial.println("Setting up!\n");
 
-  if (! bme.begin(0x77, &Wire)) {
-    Serial.println("Could not find a valid BME280 sensor, check wiring!");
-    while (1);
+  fullNode = config["full_node"];
+
+  if (fullNode) {
+    if (! bme.begin(0x77, &Wire)) {
+      Serial.println("Could not find a valid BME280 sensor, check wiring!");
+      while (1);
+    }
   }
 
   SPI.begin(); // For SPI
