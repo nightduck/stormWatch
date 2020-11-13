@@ -325,6 +325,7 @@ bool record_weather_reading(const weather_reading_t *reading) {
     }
     reportedObj["battery"] = readBattery();
     reportedObj["timestamp"] = reading->timestamp;
+    reportedObj["node"] = NODENAME;
     char jsonBuffer[256];
     serializeJson(jsonDoc, jsonBuffer);
     Serial.println(jsonBuffer);
@@ -363,6 +364,7 @@ bool record_lightning_event(const lightn_event_t *event) {
     JsonObject reportedObj = stateObj.createNestedObject("reported");
     reportedObj["power"] = event->power;
     reportedObj["timestamp"] = event->timestamp;
+    reportedObj["node"] = NODENAME;
     char jsonBuffer[256];
     serializeJson(jsonDoc, jsonBuffer);
     Serial.println(jsonBuffer);
