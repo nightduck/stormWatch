@@ -90,13 +90,68 @@ char AWS_CERT_PRIVATE[1792];
 WiFiClientSecure net = WiFiClientSecure();
 MQTTClient client = MQTTClient(256);
 
+void read_config() {
+  lightning.maskDisturber((bool)config["mask_disturbers"]);
+  if (config["indoor"]) {
+    lightning.setIndoorOutdoor(INDOOR);
+  } else {
+    lightning.setIndoorOutdoor(OUTDOOR);
+  }
+  lightning.setNoiseLevel(config["noise_level"]);
+  lightning.spikeRejection(config["spike_rejection"]);
+  lightning.lightningThreshold(config["lightning_threshold"]);
+  lightning.watchdogThreshold(config["watchdog_threshold"]);
+  lightning.clearStatistics(true);
+
+  WAKING_PERIOD = config["waking_period"].as<int>();
+}
+
 void downloadNewConfig(String &topic, String &payload) {
   Serial.println("Got message!");
   StaticJsonDocument<256> jsonDoc;
   deserializeJson(jsonDoc, payload);
+
+  JsonObject cfg = jsonDoc["state"]["reported"];
   char jsonBuffer[256];
-  serializeJson(jsonDoc["state"]["reported"], jsonBuffer);
+  serializeJson(cfg, jsonBuffer);
   Serial.println(jsonBuffer);
+
+  if(cfg.containsKey("mask_disturbers") && cfg["mask_disturbers"].is<bool>()) {
+    config["mask_disturbers"] = cfg["mask_disturbers"];
+  }
+  if(cfg.containsKey("indoor") && cfg["indoor"].is<bool>()) {
+    config["indoor"] = cfg["indoor"];
+  }
+  if(cfg.containsKey("noise_level") && cfg["noise_level"].is<int>()) {
+    config["noise_level"] = cfg["noise_level"];
+  }
+  if(cfg.containsKey("spike_rejection") && cfg["spike_rejection"].is<int>()) {
+    config["spike_rejection"] = cfg["spike_rejection"];
+  }
+  if(cfg.containsKey("lightning_threshold") && cfg["lightning_threshold"].is<int>()) {
+    config["lightning_threshold"] = cfg["lightning_threshold"];
+  }
+  if(cfg.containsKey("watchdog_threshold") && cfg["watchdog_threshold"].is<int>()) {
+    config["watchdog_threshold"] = cfg["watchdog_threshold"];
+  }
+  if(cfg.containsKey("waking_period") && cfg["waking_period"].is<int>()) {
+    config["waking_period"] = cfg["waking_period"];
+  }
+
+  // TODO: Wifi check with fallback??
+  if(cfg.containsKey("wifi_ssid") && cfg["wifi_ssid"].is<String>()) {
+    config["wifi_ssid"] = cfg["wifi_ssid"];
+  }
+  if(cfg.containsKey("wifi_password") && cfg["wifi_password"].is<String>()) {
+    config["wifi_password"] = cfg["wifi_password"];
+  }
+
+  read_config();
+
+  if(cfg.containsKey("online") && !cfg["online"].as<bool>()) {
+    // TODO: Turn off wifi until next power cycle or hard reset
+  }
+
 }
 
 String getTimeStampString() {
@@ -116,14 +171,17 @@ String getTimeStampString() {
 
 void syncTime() {
   // Connect to NTP server and set time
-  configTime(0, 0, "time-c-wwv.nist.gov", "time.google.com", "pool.ntp.org");
   struct tm timeinfo;
+  configTime(0, 0, "time.google.com", "time-c-wwv.nist.gov", "pool.ntp.org");
   if (!getLocalTime(&timeinfo)) {
     Serial.println("HALTING!!! Can't get NTP time");
     while(true);
   }
+  // TODO: Get rid of timelib, and set variable to millis. Compare this with last measurement to track drift.
+  //       Most recent drift reading is reported, but a running exponential moving average is also calculated,
+  //       and this is used to adjust the clock when offline
   setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
-          timeinfo.tm_mday, timeinfo.tm_mon+1,timeinfo.tm_year - 100); // <--- set internal RTC
+          timeinfo.tm_mday, timeinfo.tm_mon+1, timeinfo.tm_year - 100); // <--- set internal RTC
 }
 
 void connectToWiFi()
@@ -526,19 +584,8 @@ void setup() {
     Serial.println ("Lightning Detector did not start up, freezing!"); 
     while(1); 
   }
-  lightning.maskDisturber((bool)config["mask_disturbers"]);
-  if (config["indoor"]) {
-    lightning.setIndoorOutdoor(INDOOR);
-  } else {
-    lightning.setIndoorOutdoor(OUTDOOR);
-  }
-  lightning.setNoiseLevel(config["noise_level"]);
-  lightning.spikeRejection(config["spike_rejection"]);
-  lightning.lightningThreshold(config["lightning_threshold"]);
-  lightning.watchdogThreshold(config["watchdog_threshold"]);
-  lightning.clearStatistics(true);
 
-  WAKING_PERIOD = config["waking_period"].as<int>();
+  read_config();    // Set all the hardware settings based on the loaded configuration (noise threshhold, polling rate, etc)
 
   sawLightning = false;
   attachInterrupt(LIGHTN_INT, LIGHTN_ISR, HIGH);

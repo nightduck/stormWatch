@@ -1,0 +1,13 @@
+{
+    "mask_disturbers" : true,
+    "indoor" : false,
+    "noise_level" : 1,
+    "spike_rejection" : 1,
+    "lightning_threshold" : 1,
+    "watchdog_threshold" : 1,
+    "waking_period" : 60,
+    "wifi_ssid" : "AP_NAME",
+    "wifi_password" : "hi",
+    "online" : true
+ }
+ 
