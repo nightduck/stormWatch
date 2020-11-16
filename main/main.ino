@@ -13,7 +13,6 @@
 #include <MQTTClient.h>
 #include <ArduinoJson.h>
 #include "WiFi.h"
-#include "TimeLib.h"
 
 #define COUNTER_0 GPIO_NUM_25
 #define COUNTER_1 GPIO_NUM_26
@@ -51,6 +50,9 @@
 #define WEATHER_PUB_TOPIC   "sensor/" + NODENAME + "/weather"
 #define LIGHTNING_PUB_TOPIC "sensor/" + NODENAME + "/lightning"
 
+#define MS_PER_MIN    60000L
+#define EMA_FACTOR    0.05
+
 String NODENAME;
 
 int WAKING_PERIOD;  // Number of seconds between weather readings
@@ -81,7 +83,10 @@ SparkFun_AS3935 lightning;
 bool sawLightning;
 bool factoryReset;
 
-int secs;
+time_t lastNTP;
+ulong lastSyncMillis;
+long lastDrift;       // Milliseconds lost per observed minute between last two syncs
+long driftEMA;        // Running EMA of lastDrift
 
 char AWS_CERT_CA[1280];
 char AWS_CERT_CRT[1280];
@@ -89,6 +94,14 @@ char AWS_CERT_PRIVATE[1792];
 
 WiFiClientSecure net = WiFiClientSecure();
 MQTTClient client = MQTTClient(256);
+
+// Returns seconds since epoch
+ulong now() {
+  ulong timeSinceLastSync = millis() - lastSyncMillis;
+  ulong drift = timeSinceLastSync / MS_PER_MIN * driftEMA;
+
+  return (timeSinceLastSync + drift) / 1000 + lastNTP;
+}
 
 void read_config() {
   lightning.maskDisturber((bool)config["mask_disturbers"]);
@@ -104,17 +117,15 @@ void read_config() {
   lightning.clearStatistics(true);
 
   WAKING_PERIOD = config["waking_period"].as<int>();
+  driftEMA = config["drift"].as<long>();
 }
 
 void downloadNewConfig(String &topic, String &payload) {
   Serial.println("Got message!");
-  StaticJsonDocument<256> jsonDoc;
-  deserializeJson(jsonDoc, payload);
+  StaticJsonDocument<256> cfg;
+  deserializeJson(cfg, payload);
 
-  JsonObject cfg = jsonDoc["state"]["reported"];
-  char jsonBuffer[256];
-  serializeJson(cfg, jsonBuffer);
-  Serial.println(jsonBuffer);
+  Serial.println(payload);
 
   if(cfg.containsKey("mask_disturbers") && cfg["mask_disturbers"].is<bool>()) {
     config["mask_disturbers"] = cfg["mask_disturbers"];
@@ -137,6 +148,9 @@ void downloadNewConfig(String &topic, String &payload) {
   if(cfg.containsKey("waking_period") && cfg["waking_period"].is<int>()) {
     config["waking_period"] = cfg["waking_period"];
   }
+  if(cfg.containsKey("drift") && cfg["drift"].is<long>()) {
+    config["drift"] = cfg["drift"];
+  }
 
   // TODO: Wifi check with fallback??
   if(cfg.containsKey("wifi_ssid") && cfg["wifi_ssid"].is<String>()) {
@@ -152,36 +166,40 @@ void downloadNewConfig(String &topic, String &payload) {
     // TODO: Turn off wifi until next power cycle or hard reset
   }
 
+  serializeJson(config, payload);
+  File cfg_file = SPIFFS.open(CONFIG_FILENAME, FILE_WRITE);
+  if (cfg_file.write((uint8_t*)payload.c_str(), payload.length()) < payload.length()) {
+    Serial.println("!!! New config not correctly saved");
+  }
 }
 
-String getTimeStampString() {
-  time_t t = now();
-
-  tmElements_t tm;
-  breakTime(t, tm);
-  char timestamp[25];
-
-  sprintf(timestamp, "%d-%02d-%02dT%02d:%02d:%02d.%03dZ", 1970 + tm.Year, tm.Month, tm.Day, tm.Hour, tm.Minute, tm.Second, 0);
-  // String timestamp = String(1970 + tm.Year) + "-" + String(tm.Month, 2) + "-" + String(tm.Day, 2)
-  //     + "T" + String(tm.Hour) + ":" + String(tm.Minute, 2) + ":" + String(tm.Second, 2)
-  //     + "." + String(timems % 1000, 3) + "Z";
-
-  return timestamp;
-}
-
-void syncTime() {
+void syncTime(bool init=false) {
+  time_t currentNTP;
   // Connect to NTP server and set time
-  struct tm timeinfo;
   configTime(0, 0, "time.google.com", "time-c-wwv.nist.gov", "pool.ntp.org");
-  if (!getLocalTime(&timeinfo)) {
+  if (init)
+    delay(500);
+  ulong currentMillis = millis();
+  if (!time(&currentNTP)) {
     Serial.println("HALTING!!! Can't get NTP time");
     while(true);
   }
-  // TODO: Get rid of timelib, and set variable to millis. Compare this with last measurement to track drift.
-  //       Most recent drift reading is reported, but a running exponential moving average is also calculated,
-  //       and this is used to adjust the clock when offline
-  setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
-          timeinfo.tm_mday, timeinfo.tm_mon+1, timeinfo.tm_year - 100); // <--- set internal RTC
+
+  if (init) {
+    driftEMA = config["drift"].as<long>();
+    lastDrift = driftEMA;
+  } else {
+    long diffNTP_ms = (currentNTP - lastNTP) * 1000;
+    long diffMillis_ms = currentMillis - lastSyncMillis;
+
+    long drift = (long)(((long long)diffNTP_ms * MS_PER_MIN) / diffMillis_ms) - MS_PER_MIN;
+
+    driftEMA = driftEMA * (1 - EMA_FACTOR) + drift * EMA_FACTOR;
+    lastDrift = drift;
+  }
+
+  lastNTP = currentNTP;
+  lastSyncMillis = currentMillis;
 }
 
 void connectToWiFi()
@@ -383,6 +401,7 @@ bool record_weather_reading(const weather_reading_t *reading) {
     }
     reportedObj["battery"] = readBattery();
     reportedObj["timestamp"] = reading->timestamp;
+    reportedObj["drift"] = driftEMA;
     reportedObj["node"] = NODENAME;
     char jsonBuffer[256];
     serializeJson(jsonDoc, jsonBuffer);
@@ -559,7 +578,7 @@ void setup() {
 
   connectToWiFi();
 
-  syncTime();
+  syncTime(true);
 
   loadCerts();
   connectAWS();
@@ -603,8 +622,7 @@ void setup() {
     // pm_config.light_sleep_enable = false;
     // ESP_ERROR_CHECK( esp_pm_configure(&pm_config) );
 
-  secs = 0;
-  esp_sleep_enable_timer_wakeup(1000000);   // Take first reading 1sec after setup
+  esp_sleep_enable_timer_wakeup(WAKING_PERIOD * 1000000);   // Take first reading 1sec after setup
   esp_sleep_enable_gpio_wakeup();
 }
 

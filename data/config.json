@@ -6,6 +6,7 @@
     "lightning_threshold" : 1,
     "watchdog_threshold" : 1,
     "waking_period" : 360,
+    "drift" : -250,
     "full_node" : false,
     "wifi_ssid" : "WIFI_NAME_HERE",
     "wifi_password" : "WIFI_PASSWORD_HERE",
