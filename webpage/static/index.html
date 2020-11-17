@@ -2,13 +2,49 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <title>stormWatch</title>
     <link rel="stylesheet" href="https://d19vzq90twjlae.cloudfront.net/leaflet-0.7/leaflet.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.17/d3.min.js"></script>
     <script src="https://d19vzq90twjlae.cloudfront.net/leaflet-0.7/leaflet.js"></script>
+    <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
+    <style>
+        .columnLeft {
+            float: left;
+            width: 1024px;
+            height: 720px;
+        }
+        .columnRight {
+            margin-left: 20px;
+            padding-top: 10px;
+            float: left; 
+            width: 300px;
+            height: 720px;
+            position: relative;
+        }
+    </style>
 </head>
 <body>
-    <div id="map" style="width: 1024px; height: 720px"></div>
+    <div class="row">
+        <h1 style="font-size:100px; color:black; margin:20px;">stormWatch</h1>
+        <div id="map" class="columnLeft"></div>
+        <div class="columnRight">
+            <h1 style="font-size:30px; color:black; margin:10px; visibility: hidden;" id="info-header">Node Information</h1>
+            <ul class="list-group" id="node" style="visibility: hidden; position: absolute;">
+                <li class="list-group-item list-group-item-info" id="node_nodename"></li>
+                <li class="list-group-item list-group-item-info" id="node_coordinates"></li>
+                <li class="list-group-item list-group-item-info" id="node_temp"></li>
+                <li class="list-group-item list-group-item-info" id="node_pressure"></li>
+                <li class="list-group-item list-group-item-info" id="node_humidity"></li>
+                <li class="list-group-item list-group-item-info" id="node_rainfall"></li>
+                <li class="list-group-item list-group-item-info" id="node_wind_direction"></li>
+                <li class="list-group-item list-group-item-info" id="node_wind_speed"></li>
+            </ul> 
+            <ul class="list-group" id="light" style="visibility: hidden; position: absolute;">
+                <li class="list-group-item list-group-item-success" id="light_coordinates"></li>
+                <li class="list-group-item list-group-item-success" id="light_time"></li>
+            </ul> 
+        </div>
+    </div>
     <script src="map.js"></script>
 </body>
 </html>
