@@ -5,6 +5,7 @@
     "spike_rejection" : 1,
     "lightning_threshold" : 1,
     "watchdog_threshold" : 1,
+    "ec2_endpoint" : "ENDPOINTNAME.REGION.compute.amazonaws.com",
     "waking_period" : 360,
     "drift" : -250,
     "full_node" : false,

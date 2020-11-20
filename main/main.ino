@@ -12,7 +12,8 @@
 #include <WiFiClientSecure.h>
 #include <MQTTClient.h>
 #include <ArduinoJson.h>
-#include "WiFi.h"
+#include <WiFi.h>
+#include <HTTPClient.h>
 
 #define COUNTER_0 GPIO_NUM_25
 #define COUNTER_1 GPIO_NUM_26
@@ -118,6 +119,34 @@ void read_config() {
 
   WAKING_PERIOD = config["waking_period"].as<int>();
   driftEMA = config["drift"].as<long>();
+}
+
+void downloadNewConfigWeb() {
+  HTTPClient ec2_client;
+  String host = config["ec2_endpoint"];
+  String path = "/config_" + NODENAME + ".json";
+
+  Serial.print("Connecting to: ");
+  Serial.println(host + ":5000" + path);
+
+  ec2_client.begin(host, 5000, path);
+
+  if (ec2_client.GET() > 0) {
+    String payload = ec2_client.getString();
+    Serial.println("Got config");
+
+    deserializeJson(config, payload);
+
+    File cfg_file = SPIFFS.open(CONFIG_FILENAME, FILE_WRITE);
+    if (cfg_file.write((uint8_t*)payload.c_str(), payload.length()) < payload.length()) {
+      Serial.println("!!! New config not correctly saved");
+    }
+  } else {
+    Serial.println("Didn't get a response");
+  }
+
+  return;
+  
 }
 
 void downloadNewConfig(String &topic, String &payload) {
@@ -568,6 +597,7 @@ void setup() {
   Serial.println("Reading configuration");
   File fin = SPIFFS.open(CONFIG_FILENAME);
   deserializeJson(config, fin);
+
   Serial.print("Node Name: ");
   NODENAME = config["thingname"].as<String>();
   Serial.println(NODENAME);
@@ -575,6 +605,8 @@ void setup() {
   char jsonBuffer[1024];
   serializeJson(config, jsonBuffer);
   Serial.println(jsonBuffer);
+
+  fullNode = config["full_node"].as<bool>();
 
   connectToWiFi();
 
@@ -588,8 +620,6 @@ void setup() {
   client.disconnect();
 
   Serial.println("Setting up!\n");
-
-  fullNode = config["full_node"];
 
   if (fullNode) {
     if (! bme.begin(0x77, &Wire)) {
@@ -681,17 +711,18 @@ void loop() {
     case ESP_SLEEP_WAKEUP_TIMER:
       Serial.println("Wokeup because timer");
       take_reading();
+      esp_sleep_enable_timer_wakeup(WAKING_PERIOD * 1000000); 
       break;
     default:
       Serial.println("Default");
   }
 
   if (online) {
+    downloadNewConfigWeb();
     client.loop();
     client.disconnect();
   }
 
-  esp_sleep_enable_timer_wakeup(WAKING_PERIOD * 1000000);
   delay(20);
   
   //print_hw_debug();
