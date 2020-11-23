@@ -145,6 +145,8 @@ void downloadNewConfigWeb() {
     Serial.println("Didn't get a response");
   }
 
+  ec2_client.end();
+
   return;
   
 }
@@ -329,9 +331,8 @@ bool connectAWS()
   return connectMQTT();
 }
 
-bool reconnectToWifi() {
-  WiFi.reconnect();
-  while (WiFi.status() == WL_IDLE_STATUS || WiFi.status() == WL_DISCONNECTED || WiFi.status() == WL_NO_SHIELD){
+bool waitForWifiConnection() {
+  while (WiFi.status() == WL_IDLE_STATUS || WiFi.status() == WL_NO_SHIELD) {
     delay(500);
     Serial.print(".");
   }
@@ -462,9 +463,10 @@ bool record_weather_reading(const weather_reading_t *reading) {
   return true;
 }
 
-bool record_lightning_event(const lightn_event_t *event) {
-  // If in online mode, publish to cloud
-  if (online) {
+bool record_lightning_event(const lightn_event_t *event, bool publish=false) {
+  // By default, all lightning readings are saved offline to prevent network processing blocking
+  // new lightning observations. But if specified, publish
+  if (publish) {
     StaticJsonDocument<256> jsonDoc;
     JsonObject stateObj = jsonDoc.createNestedObject("state");
     JsonObject reportedObj = stateObj.createNestedObject("reported");
@@ -484,8 +486,7 @@ bool record_lightning_event(const lightn_event_t *event) {
     }
   }
 
-  // If in offline mode (or if most recent reading failed to publish),
-  // save to flash
+  // Save to flash. This also happens if the most recent publish failed
   File lightning = SPIFFS.open(WEATHER_FILENAME, FILE_APPEND);
   if (!lightning) {
     return false;
@@ -521,7 +522,7 @@ bool publish_backlog() {
 
   lightn_event_t event;
   while(lightning.read((uint8_t*)&event, sizeof(lightn_event_t)) != 0) {
-    record_lightning_event(&event);
+    record_lightning_event(&event, true);
   }
 
   SPIFFS.remove(WEATHER_FILENAME_TEMP);
@@ -660,12 +661,15 @@ void loop() {
   enterSleep();   // Turn off LED and WiFi, light sleep for 5 minutes, then turn on LED and WiFi
 
   time_t timestamp = now();   // Get timestamp immediately, so the delay in connecting to wirless doesn't corrupt it
-  reconnectToWifi();
+  WiFi.reconnect();           // Start connecting to wifi
 
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
   switch(wakeup_reason) {
     case ESP_SLEEP_WAKEUP_GPIO:
       Serial.println("Wokeup because lightning");
+
+      // Continously poll the lightning interrupt pin while we wait for wifi
+      do {
       if (digitalRead(LIGHTN_INT)) {
         sawLightning = false;
         Serial.println("Lightning interrupt recieved");
@@ -691,7 +695,6 @@ void loop() {
 
           // Lightning! Now how far away is it? Distance estimation takes into
           // account previously seen events.
-
           byte distance = lightning.distanceToStorm();
           Serial.print("Approximately: ");
           Serial.print(distance);
@@ -699,17 +702,23 @@ void loop() {
 
           // "Lightning Energy" and I do place into quotes intentionally, is a pure
           // number that does not have any physical meaning.
-          long lightEnergy = lightning.lightningEnergy();
           Serial.print("Lightning Energy: ");
-          Serial.println(lightEnergy);
+            Serial.println(event.power);
         } else {
           Serial.print("Interrupt value: ");
           Serial.println(intVal);
         }
       }
+        delay(100);
+      } while (WiFi.status() == WL_IDLE_STATUS || WiFi.status() == WL_NO_SHIELD);
+
+      // This shouldn't block, it will just determine whether or not the WiFi connection is good
+      waitForWifiConnection();
+
       break;
     case ESP_SLEEP_WAKEUP_TIMER:
       Serial.println("Wokeup because timer");
+      waitForWifiConnection();    // Wait to see if we can connect.
       take_reading();
       esp_sleep_enable_timer_wakeup(WAKING_PERIOD * 1000000); 
       break;
@@ -717,7 +726,10 @@ void loop() {
       Serial.println("Default");
   }
 
+  // If wifi is connected, publish the backlog. Used mostly when waking up for lightning reading,
+  // but also useful for period of disconnectivity.
   if (online) {
+    publish_backlog();
     downloadNewConfigWeb();
     client.loop();
     client.disconnect();
