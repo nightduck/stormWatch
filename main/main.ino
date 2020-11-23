@@ -76,6 +76,10 @@ typedef struct lightn_reading {
   time_t timestamp;
 } lightn_event_t;
 
+typedef enum wind_dir {
+  N, NNE, NE, NEE, E, SEE, SE, SSE, S, SSW, SW, SWW, W, NWW, NW, NNW
+} wind_dir;
+
 StaticJsonDocument<768> config;
 bool online;
 
@@ -386,6 +390,84 @@ int read_counter() {
   return count;
 }
 
+wind_dir read_wind_dir(void) {
+  int v = analogRead(WEATHER_VANE);
+
+  Serial.print("Voltage read: ");
+  if (v < 186) {
+    return SEE;
+  } else if (v < 244) {
+    return NEE;
+  } else if (v < 335) {
+    return E;
+  } else if (v < 530) {
+    return SSE;
+  } else if (v < 781) {
+    return SE;
+  } else if (v < 1000) {
+    return SSW;
+  } else if (v < 1343) {
+    return S;
+  } else if (v < 1714) {
+    return NNE;
+  } else if (v < 2126) {
+    return NE;
+  } else if (v < 2485) {
+    return SWW;
+  } else if (v < 2705) {
+    return SW;
+  } else if (v < 3037) {
+    return NNW;
+  } else if (v < 3302) {
+    return N;
+  } else if (v < 3518) {
+    return NWW;
+  } else if (v < 3768) {
+    return NW;
+  } else {
+    return W;
+  }
+}
+
+String translate_wind_dir(wind_dir d) {
+  switch(d) {
+    case N:
+      return "N";
+    case NNW:
+      return "NNW";
+    case NW:
+      return "NW";
+    case NWW:
+      return "NWW";
+    case W:
+      return "W";
+    case SWW:
+      return "SWW";
+    case SW:
+      return "SW";
+    case SSW:
+      return "SSW";
+    case S:
+      return "S";
+    case SSE:
+      return "SSE";
+    case SE:
+      return "SE";
+    case SEE:
+      return "SEE";
+    case E:
+      return "E";
+    case NEE:
+      return "NEE";
+    case NE:
+      return "NE";
+    case NNE:
+      return "NNE";
+    default:
+      return "nil";
+  }
+}
+
 void reset_counter() {
   digitalWrite(COUNTER_RST, HIGH);
   delay(2);
@@ -425,7 +507,7 @@ bool record_weather_reading(const weather_reading_t *reading) {
       reportedObj["temp"] = reading->temp;
       reportedObj["pressure"] = reading->pressure;
       reportedObj["humidity"] = reading->humidity;
-      reportedObj["wind_direction"] = reading->wind_direction;
+      reportedObj["wind_direction"] = translate_wind_dir((wind_dir)reading->wind_direction);
       reportedObj["wind_speed"] = reading->wind_speed;
       reportedObj["rainfall_mm"] = reading->rainfall_mm;
     }
@@ -536,6 +618,7 @@ void take_reading() {
     reading.temp = bme.readTemperature();
     reading.pressure = bme.readPressure() / 100.0F;
     reading.humidity = bme.readHumidity();
+    reading.wind_direction = read_wind_dir();
   }
   reading.timestamp = now();
   // TODO: More sensors here
@@ -670,45 +753,45 @@ void loop() {
 
       // Continously poll the lightning interrupt pin while we wait for wifi
       do {
-      if (digitalRead(LIGHTN_INT)) {
-        sawLightning = false;
-        Serial.println("Lightning interrupt recieved");
-        delay(2);
-        int intVal = lightning.readInterruptReg();
+        if (digitalRead(LIGHTN_INT)) {
+          sawLightning = false;
+          Serial.println("Lightning interrupt recieved");
+          delay(2);
+          int intVal = lightning.readInterruptReg();
 
-        if (intVal == NOISE_INT) {
-          Serial.println("Noise.");
-        } else if (intVal == DISTURBER_INT) {
-          Serial.println("Disturber.");
-        } else if (intVal == LIGHTNING_INT) {
-          Serial.println("Lightning Strike Detected!");
+          if (intVal == NOISE_INT) {
+            Serial.println("Noise.");
+          } else if (intVal == DISTURBER_INT) {
+            Serial.println("Disturber.");
+          } else if (intVal == LIGHTNING_INT) {
+            Serial.println("Lightning Strike Detected!");
 
-          lightn_event_t event;
-          event.power = lightning.lightningEnergy();
-          event.timestamp = timestamp;
+            lightn_event_t event;
+            event.power = lightning.lightningEnergy();
+            event.timestamp = timestamp;
 
-          if (!record_lightning_event(&event)) {
-            Serial.println("FAILED TO SAVE DATA. ABORTING");
-            print_hw_debug();
-            while(true);
-          };
+            if (!record_lightning_event(&event)) {
+              Serial.println("FAILED TO SAVE DATA. ABORTING");
+              print_hw_debug();
+              while(true);
+            };
 
-          // Lightning! Now how far away is it? Distance estimation takes into
-          // account previously seen events.
-          byte distance = lightning.distanceToStorm();
-          Serial.print("Approximately: ");
-          Serial.print(distance);
-          Serial.println("km away!");
+            // Lightning! Now how far away is it? Distance estimation takes into
+            // account previously seen events.
+            byte distance = lightning.distanceToStorm();
+            Serial.print("Approximately: ");
+            Serial.print(distance);
+            Serial.println("km away!");
 
-          // "Lightning Energy" and I do place into quotes intentionally, is a pure
-          // number that does not have any physical meaning.
-          Serial.print("Lightning Energy: ");
+            // "Lightning Energy" and I do place into quotes intentionally, is a pure
+            // number that does not have any physical meaning.
+            Serial.print("Lightning Energy: ");
             Serial.println(event.power);
-        } else {
-          Serial.print("Interrupt value: ");
-          Serial.println(intVal);
+          } else {
+            Serial.print("Interrupt value: ");
+            Serial.println(intVal);
+          }
         }
-      }
         delay(100);
       } while (WiFi.status() == WL_IDLE_STATUS || WiFi.status() == WL_NO_SHIELD);
 
