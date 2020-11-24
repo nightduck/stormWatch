@@ -92,6 +92,7 @@ time_t lastNTP;
 ulong lastSyncMillis;
 long lastDrift;       // Milliseconds lost per observed minute between last two syncs
 long driftEMA;        // Running EMA of lastDrift
+time_t lastReading;
 
 char AWS_CERT_CA[1280];
 char AWS_CERT_CRT[1280];
@@ -338,7 +339,8 @@ bool connectAWS()
 }
 
 bool waitForWifiConnection() {
-  while (WiFi.status() == WL_IDLE_STATUS || WiFi.status() == WL_NO_SHIELD) {
+  for(int i = 0; (WiFi.status() == WL_IDLE_STATUS || WiFi.status() == WL_NO_SHIELD || WiFi.status() == WL_DISCONNECTED)
+    && i < 10; i++) {
     delay(500);
     Serial.print(".");
   }
@@ -395,7 +397,6 @@ int read_counter() {
 wind_dir read_wind_dir(void) {
   int v = analogRead(WEATHER_VANE);
 
-  Serial.print("Voltage read: ");
   if (v < 186) {
     return SEE;
   } else if (v < 244) {
@@ -571,7 +572,7 @@ bool record_lightning_event(const lightn_event_t *event, bool publish=false) {
   }
 
   // Save to flash. This also happens if the most recent publish failed
-  File lightning = SPIFFS.open(WEATHER_FILENAME, FILE_APPEND);
+  File lightning = SPIFFS.open(LIGHTNING_FILENAME, FILE_APPEND);
   if (!lightning) {
     return false;
   }
@@ -624,6 +625,9 @@ void take_reading() {
   }
   reading.timestamp = now();
   // TODO: More sensors here
+
+
+  waitForWifiConnection();    // Wait to see if wifi is available
 
   if (!record_weather_reading(&reading)) {
     Serial.println("FAILED TO SAVE DATA. ABORTING");
@@ -695,6 +699,7 @@ void setup() {
   connectToWiFi();
 
   syncTime(true);
+  lastReading = now();
 
   loadCerts();
   connectAWS();
@@ -800,11 +805,18 @@ void loop() {
       // This shouldn't block, it will just determine whether or not the WiFi connection is good
       waitForWifiConnection();
 
-      break;
+      esp_sleep_enable_gpio_wakeup();
+
+      // Renew the timer wakeup. Unless it's been more than 5 minutes, in which case, fall through and take the reading
+      if (timestamp - lastReading < WAKING_PERIOD) {
+        esp_sleep_enable_timer_wakeup((WAKING_PERIOD - (timestamp - lastReading)) * 1000000);   // Take first reading 1sec after setup
+        break;
+      }
+
     case ESP_SLEEP_WAKEUP_TIMER:
       Serial.println("Wokeup because timer");
-      waitForWifiConnection();    // Wait to see if we can connect.
-      take_reading();
+      take_reading();     // Take measurements, then wait for wifi, then publish reading
+      lastReading = timestamp;
       esp_sleep_enable_timer_wakeup(WAKING_PERIOD * 1000000); 
       break;
     default:
