@@ -122,7 +122,7 @@ void read_config() {
   lightning.clearStatistics(true);
 
   WAKING_PERIOD = config["waking_period"].as<int>();
-  driftEMA = config["drift"].as<long>();
+  //driftEMA = config["drift"].as<long>();
 }
 
 void downloadNewConfigWeb() {
@@ -150,6 +150,8 @@ void downloadNewConfigWeb() {
   }
 
   ec2_client.end();
+
+  read_config();
 
   return;
   
@@ -636,9 +638,7 @@ void IRAM_ATTR LIGHTN_ISR() {
 
 void enterSleep() {
   esp_wifi_stop();
-  digitalWrite(LED, 0);
   esp_light_sleep_start();    // Spend 5 minutes here
-  digitalWrite(LED, 1);
   if (esp_wifi_start() != ESP_OK) {
     Serial.println("Error restarting wifi");
   }
@@ -738,6 +738,8 @@ void setup() {
 
   esp_sleep_enable_timer_wakeup(WAKING_PERIOD * 1000000);   // Take first reading 1sec after setup
   esp_sleep_enable_gpio_wakeup();
+
+  digitalWrite(LED, 0);   // Turn off LED after setup
 }
 
 void loop() {
