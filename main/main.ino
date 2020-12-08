@@ -16,14 +16,14 @@
 #include <HTTPClient.h>
 
 #define COUNTER_0 GPIO_NUM_25
-#define COUNTER_1 GPIO_NUM_26
-#define COUNTER_2 GPIO_NUM_12
-#define COUNTER_3 GPIO_NUM_27
-#define COUNTER_4 GPIO_NUM_33
-#define COUNTER_5 GPIO_NUM_15
-#define COUNTER_6 GPIO_NUM_32
-#define COUNTER_7 GPIO_NUM_14
-#define COUNTER_RST GPIO_NUM_34
+#define COUNTER_1 GPIO_NUM_12
+#define COUNTER_2 GPIO_NUM_27
+#define COUNTER_3 GPIO_NUM_33
+#define COUNTER_4 GPIO_NUM_15
+#define COUNTER_5 GPIO_NUM_32
+#define COUNTER_6 GPIO_NUM_14
+#define COUNTER_7 GPIO_NUM_34
+#define COUNTER_RST GPIO_NUM_25
 #define LIGHTN_INT GPIO_NUM_4
 #define ANEM_INT GPIO_NUM_36
 #define WEATHER_VANE GPIO_NUM_39 
@@ -39,6 +39,10 @@
 #define LIGHTNING_INT 0x08
 #define DISTURBER_INT 0x04
 #define NOISE_INT 0x01
+
+#define RAIN_MM_PER_TICK    0.2794
+#define WIND_KMH_PER_SEC    2.4
+#define WIND_SPD_POLL_TIME  3000
 
 #define CONFIG_FILENAME "/config.json"
 #define WEATHER_FILENAME "/weather_readings"
@@ -381,17 +385,41 @@ bool waitForWifiConnection() {
   return online;
 }
 
-int read_counter() {
-  char count = digitalRead(COUNTER_0);
-  count += digitalRead(COUNTER_1) << 1;
-  count += digitalRead(COUNTER_2) << 2;
-  count += digitalRead(COUNTER_3) << 3;
-  count += digitalRead(COUNTER_4) << 4;
-  count += digitalRead(COUNTER_5) << 5;
-  count += digitalRead(COUNTER_6) << 6;
-  count += digitalRead(COUNTER_7) << 7;
+// Blocks for 3 seconds, returns windspeed in km/h in 0.8 increments
+float read_anemometer() {
+  int now = millis();
+  int ticks = 0;
 
-  return count;
+  int state = digitalRead(ANEM_INT);
+  while(millis() < now + WIND_SPD_POLL_TIME) {
+    int newState = digitalRead(ANEM_INT);
+    if (newState != state) {  // If switch state changes
+      if (newState) {         // If switch is now open, count tick
+        ticks++;
+      }
+      state = newState;
+    }
+    delay(5);
+  }
+
+  // Ticks * km/h/s * ms/s / ms of polling
+  return ticks * WIND_KMH_PER_SEC * 1000 / WIND_SPD_POLL_TIME;
+}
+
+float read_rain_gauge() {
+  // Software fix for hardware issue: LSB is skipped for some reason. LSB is fixed to ground. 2nd LSB toggles with clock
+  char count = digitalRead(COUNTER_1);
+  count += digitalRead(COUNTER_2) << 1;
+  count += digitalRead(COUNTER_3) << 2;
+  count += digitalRead(COUNTER_4) << 3;
+  count += digitalRead(COUNTER_5) << 4;
+  count += digitalRead(COUNTER_6) << 5;
+  count += digitalRead(COUNTER_7) << 6;
+  //count += digitalRead(COUNTER_7) << 7;
+
+  reset_counter();
+
+  return count * RAIN_MM_PER_TICK;
 }
 
 wind_dir read_wind_dir(void) {
@@ -622,6 +650,8 @@ void take_reading() {
     reading.pressure = bme.readPressure() / 100.0F;
     reading.humidity = bme.readHumidity();
     reading.wind_direction = read_wind_dir();
+    reading.wind_speed = read_anemometer();   // Blocks for 3 seconds
+    reading.rainfall_mm = read_rain_gauge();
   }
   reading.timestamp = now();
   // TODO: More sensors here
@@ -660,6 +690,8 @@ void setup() {
   pinMode(COUNTER_7, INPUT);
   pinMode(COUNTER_RST, OUTPUT);
   pinMode(LIGHTN_INT, INPUT);
+  pinMode(ANEM_INT, INPUT);
+  
   digitalWrite(LED, 1);
 
   Serial.begin(115200);
@@ -724,6 +756,27 @@ void setup() {
   }
 
   read_config();    // Set all the hardware settings based on the loaded configuration (noise threshhold, polling rate, etc)
+
+  // // DEBUGGING
+  // while (1) {
+  //   Serial.println("Taking reading");
+  //   float rain = read_rain_gauge();
+  //   float wind = read_anemometer();
+  //   Serial.print("Temp: ");
+  //   Serial.println(bme.readTemperature());
+  //   Serial.print("Pressure: ");
+  //   Serial.println(bme.readPressure() / 100.0F);
+  //   Serial.print("Humidity: ");
+  //   Serial.println(bme.readHumidity());
+  //   Serial.print("Wind Direction: ");
+  //   Serial.println(translate_wind_dir(read_wind_dir()));
+  //   Serial.print("Wind Speed: ");
+  //   Serial.println(wind);
+  //   Serial.print("Rain: ");
+  //   Serial.println(rain);
+  //   Serial.println();
+  //   delay(10000);
+  // }
 
   sawLightning = false;
   attachInterrupt(LIGHTN_INT, LIGHTN_ISR, HIGH);
