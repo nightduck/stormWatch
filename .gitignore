@@ -34,3 +34,5 @@ include/secrets.h
 *.zip
 venv
 venv3
+
+rds_config.json
