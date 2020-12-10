@@ -5,7 +5,7 @@ import logging
 import importlib
 import pymysql
 import datetime
-from datetime timedelta
+
 import os
 
 app = Flask(__name__)
@@ -82,7 +82,7 @@ def helper_weather_extract(data):
 # Return the latest weather record in the time window
 # Return None if no data exists
 def extract_weather_data(start_time, end_time):
-  nodes=extract_nodes(conn)
+  nodes=extract_nodes()
   #print(nodes)
   weather_records=[]
   
@@ -158,12 +158,15 @@ def update(t1, t2):
     start_time=datetime.datetime.fromtimestamp(int(t1)).strftime('%Y-%m-%d %H:%M:%S')
     end_time=datetime.datetime.fromtimestamp(int(t2)).strftime('%Y-%m-%d %H:%M:%S')
 
+    
     nodes_data={
-      "nodes":extract_weather_data(conn, start_time, end_time),
-      "lightning" : extract_lightning_data(conn, start_time, end_time)
+      "nodes":extract_weather_data(start_time, end_time),
+      "lightning" : extract_lightning_data(start_time, end_time)
     }
+   
     # Insert rest of code here from lambda_test
     #return '{"key":"value", "hey": "it works"}'
+    #return {start_time}
     return nodes_data
 
 
@@ -175,15 +178,14 @@ def extract_history_weather_data(node, weather_start_time, weather_end_time):
     conn.commit()
   data=cur.fetchall()
   
-  
   # Compute the start time of the rainfall window 
-  rainfall_start_time_1h = datetime.strptime(weather_end_time, '%Y-%m-%d %H:%M:%S') - timedelta(hours=1)
-  rainfall_start_time_6h = datetime.strptime(weather_end_time, '%Y-%m-%d %H:%M:%S') - timedelta(hours=6)
-  rainfall_start_time_24h = datetime.strptime(weather_end_time, '%Y-%m-%d %H:%M:%S') - timedelta(hours=24)
+  rainfall_start_time_1h = datetime.datetime.strptime(weather_end_time, '%Y-%m-%d %H:%M:%S') - datetime.timedelta(hours=1)
+  rainfall_start_time_6h = datetime.datetime.strptime(weather_end_time, '%Y-%m-%d %H:%M:%S') - datetime.timedelta(hours=6)
+  rainfall_start_time_24h = datetime.datetime.strptime(weather_end_time, '%Y-%m-%d %H:%M:%S') - datetime.timedelta(hours=24)
   
-  rainfall_start_time_1h=datetime.strftime(rainfall_start_time_1h, '%Y-%m-%d %H:%M:%S')
-  rainfall_start_time_6h=datetime.strftime(rainfall_start_time_6h, '%Y-%m-%d %H:%M:%S')
-  rainfall_start_time_24h=datetime.strftime(rainfall_start_time_24h, '%Y-%m-%d %H:%M:%S')
+  rainfall_start_time_1h=datetime.datetime.strftime(rainfall_start_time_1h, '%Y-%m-%d %H:%M:%S')
+  rainfall_start_time_6h=datetime.datetime.strftime(rainfall_start_time_6h, '%Y-%m-%d %H:%M:%S')
+  rainfall_start_time_24h=datetime.datetime.strftime(rainfall_start_time_24h, '%Y-%m-%d %H:%M:%S')
 
   
   with conn.cursor() as cur:
@@ -203,7 +205,7 @@ def extract_history_weather_data(node, weather_start_time, weather_end_time):
     rainfall_24h+=float(row[0])
   
   
-  if data==None:
+  if data==():
       weather_data={
           "nodename" : node,
           "coordinates" : None,
@@ -261,12 +263,12 @@ def extract_history_weather_data(node, weather_start_time, weather_end_time):
     }
   return weather_data
 
-@app.route('/history/<t1>/<t2>')    # Arguments are integers: seconds since epoch
-def history(t1, t2):
+@app.route('/history/<node>/<t1>/<t2>')    # Arguments are integers: seconds since epoch
+def history(node, t1, t2):
     weather_start_time=datetime.datetime.fromtimestamp(int(t1)).strftime('%Y-%m-%d %H:%M:%S')
     weather_end_time=datetime.datetime.fromtimestamp(int(t2)).strftime('%Y-%m-%d %H:%M:%S')
 
-    node_history_data=extract_history_weather_data(conn, node, weather_start_time, weather_end_time)
+    node_history_data=extract_history_weather_data(node, weather_start_time, weather_end_time)
     return node_history_data
     # TODO: Insert rest of code here from lambda_history
     #return '{"key":"value", "hey": "it also works"}'
