@@ -38,19 +38,20 @@ def rsc_file(path):
     return app.send_static_file(path)
 
 
-# Extract nodename from DB
+# Extract nodename, full_node from DB nodes
 def extract_nodes():
   with conn.cursor() as cur:
-    cur.execute("select nodename from stormwatch.nodes")
+    cur.execute("select nodename, full_node from stormwatch.nodes")
     conn.commit()
   data=cur.fetchall()
   nodes=[]
   for row in data:
-    nodes.append(row[0])
+    nodes.append([row[0], row[1]])
   return nodes
   
 
-def helper_weather_extract(data):
+def helper_weather_extract(data, full_node):
+  if full_node:
     temp = float(data[0]) if data[0]!=None else None
     humidity = float(data[1]) if data[1]!=None else None
     wind_direction=str(data[2]) if data[2]!=None else None
@@ -74,44 +75,54 @@ def helper_weather_extract(data):
       "wind_speed" : wind_speed,
       "timestamp": timestamp,
       "battery": battery
-      }
-      
-    return weather_data
+    }
+  else:
+    nodename=str(data[0]) 
+    latitude=float(data[1]) 
+    longitude=float(data[2]) 
+    timestamp=str(data[3]) 
+    battery=float(data[4]) if data[4]!=None else None
+
+    weather_data={
+      "nodename" : nodename,
+      "coordinates" : [longitude, latitude],
+      "timestamp": timestamp,
+      "battery": battery
+    }
+   
+  return weather_data
   
 # Extract data from stormwatch.weather_readings
 # Return the latest weather record in the time window
-# Return None if no data exists
+# Nothing will be returned if the data of the node are missing in this time window
+
 def extract_weather_data(start_time, end_time):
   nodes=extract_nodes()
   #print(nodes)
   weather_records=[]
   
+  print(nodes)
   for node in nodes:
-    with conn.cursor() as cur:
-      cur.execute("select temp, humidity, wind_direction, wind_speed, rainfall, nodename, latitude, longitude, timestamp, pressure, battery\
-      from stormwatch.weather_readings where timestamp <= %s and timestamp >= %s and nodename=%s\
-      order by timestamp desc limit 1", (end_time, start_time, node))
-      conn.commit()
-    data=cur.fetchone()
-    
-    
-    if data==None:
-      weather_data={
-      "nodename" : node,
-      "coordinates" : [None, None],
-      "temp" : None,
-      "pressure" : None,
-      "humidity": None,
-      "rainfall" : None,
-      "wind_direction" : None,
-      "wind_speed" : None,
-      "timestamp": None,
-      "battery": None
-      }
-      weather_records.append(weather_data)
-    
+    if node[1]==1:
+      with conn.cursor() as cur:
+        cur.execute("select temp, humidity, wind_direction, wind_speed, rainfall, nodename, latitude, longitude, timestamp, pressure, battery\
+        from stormwatch.weather_readings where timestamp <= %s and timestamp >= %s and nodename=%s\
+        order by timestamp desc limit 1", (end_time, start_time, node[0]))
+        conn.commit()
     else:
-      weather_records.append(helper_weather_extract(data))
+      with conn.cursor() as cur:
+        cur.execute("select nodename, latitude, longitude, timestamp, battery\
+        from stormwatch.weather_readings where timestamp <= %s and timestamp >= %s and nodename=%s\
+        order by timestamp desc limit 1", (end_time, start_time, node[0]))
+        conn.commit()
+      
+    data=cur.fetchone()
+
+    if data==None:
+      continue
+
+    else:
+      weather_records.append(helper_weather_extract(data, node[1]))
               
   return weather_records
 
@@ -119,24 +130,20 @@ def extract_weather_data(start_time, end_time):
 
 # Extract lightning data in the time window for rest function
 # Return a list of lightning record in lightning_strikes
-# Return None values if no data exists
+# Return empty list if no data exists
 def extract_lightning_data(lightning_start_time, lightning_end_time):
   with conn.cursor() as cur:
     cur.execute("select longitude, latitude, timestamp from stormwatch.lightning_strikes \
     where timestamp>=%s and timestamp<=%s",(lightning_start_time, lightning_end_time))
     conn.commit()
   data=cur.fetchall()
-  
-  if data==None:
-      lightning_data={
-          "coordinates" : None,
-          "timestamp": None
-          }
-      return [lightning_data]
-    
-  #print(data[0])
-    
   lightning_data_list=[]
+
+  #print(data)
+  if data==():
+    return lightning_data_list
+    
+
   for row in data:
     longitude = float(row[0]) 
     latitude = float(row[1]) 
@@ -173,11 +180,55 @@ def update(t1, t2):
 
 def extract_history_weather_data(node, weather_start_time, weather_end_time):
   with conn.cursor() as cur:
+    cur.execute("select full_node from stormwatch.nodes where nodename=%s",(node))
+    conn.commit()
+  full_node=cur.fetchone()[0]
+
+ # History data for partial node
+  if full_node==0:
+    with conn.cursor() as cur:
+      cur.execute("select longitude, latitude, timestamp, battery from stormwatch.weather_readings \
+      where nodename=%s and timestamp>=%s and timestamp<=%s",(node, weather_start_time, weather_end_time))
+      conn.commit()
+    data=cur.fetchall()
+
+    if data==():
+      return {}
+    
+    longitude = float(data[0][0]) 
+    latitude = float(data[0][1]) 
+    
+    weather_data_list=[]
+    for row in data:
+      timestamp=str(row[2]) if row[2]!=None else None
+      battery=float(row[3]) if row[3]!=None else None
+      
+      current_data={
+        "timestamp": timestamp,
+        "battery": battery
+        }
+      
+      weather_data_list.append(current_data)
+              
+    weather_data={
+      "nodename" : node,
+      "coordinates" : [longitude, latitude],
+      "history": weather_data_list
+      }
+    return weather_data
+
+
+  # History data with full node
+  with conn.cursor() as cur:
     cur.execute("select longitude, latitude, temp, pressure, humidity, rainfall, wind_direction, wind_speed, timestamp, battery from stormwatch.weather_readings \
     where nodename=%s and timestamp>=%s and timestamp<=%s",(node, weather_start_time, weather_end_time))
     conn.commit()
   data=cur.fetchall()
-  
+  #print(data)
+
+  if data==():
+    return {}
+
   # Compute the start time of the rainfall window 
   rainfall_start_time_1h = datetime.datetime.strptime(weather_end_time, '%Y-%m-%d %H:%M:%S') - datetime.timedelta(hours=1)
   rainfall_start_time_6h = datetime.datetime.strptime(weather_end_time, '%Y-%m-%d %H:%M:%S') - datetime.timedelta(hours=6)
@@ -204,26 +255,6 @@ def extract_history_weather_data(node, weather_start_time, weather_end_time):
       rainfall_6h+=float(row[0])
     rainfall_24h+=float(row[0])
   
-  
-  if data==():
-      weather_data={
-          "nodename" : node,
-          "coordinates" : None,
-          "history":{
-            "temp" : None,
-            "pressure" : None,
-            "humidity": None,
-            "rainfall" : None,
-            "wind_direction" : None,
-            "wind_speed" : None,
-            "timestamp": None,
-            "battery": None
-            },
-          "rainfall_1h": rainfall_1h,
-          "rainfall_6h": rainfall_6h,
-          "rainfall_24h": rainfall_24h
-          }
-      return weather_data
     
   
   longitude = float(data[0][0]) 
