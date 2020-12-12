@@ -50,6 +50,7 @@ def extract_nodes():
   return nodes
   
 
+<<<<<<< HEAD
 def helper_weather_extract(data, full_node):
   if full_node:
     temp = float(data[0]) if data[0]!=None else None
@@ -62,19 +63,20 @@ def helper_weather_extract(data, full_node):
     longitude=float(data[7]) 
     timestamp=str(data[8]) 
     pressure=float(data[9]) if data[9]!=None else None
+=======
+def helper_weather_extract(data):
+    nodename=str(data[5])
+    latitude=float(data[6])
+    longitude=float(data[7])
+    timestamp=str(data[8])
+>>>>>>> 67be96a0649e08d0b872015aac1098517af5138e
     battery=float(data[10]) if data[10]!=None else None
-    
+
     weather_data={
       "nodename" : nodename,
       "coordinates" : [longitude, latitude],
-      "temp" : temp,
-      "pressure" : pressure,
-      "humidity": humidity,
-      "rainfall" : rainfall,
-      "wind_direction" : wind_direction,
-      "wind_speed" : wind_speed,
-      "timestamp": timestamp,
       "battery": battery
+<<<<<<< HEAD
     }
   else:
     nodename=str(data[0]) 
@@ -91,6 +93,24 @@ def helper_weather_extract(data, full_node):
     }
    
   return weather_data
+=======
+      }
+
+    if data[0] != None:
+        weather_data["temp"] = data[0]
+    if data[1] != None:
+        weather_data["humidity"] = data[1]
+    if data[2] != None:
+        weather_data["wind_direction"] = data[2]
+    if data[3] != None:
+        weather_data["wind_speed"] = data[3]
+    if data[4] != None:
+        weather_data["rainfall"] = data[4]
+    if data[9] != None:
+        weather_data["pressure"] = data[9]
+      
+    return weather_data
+>>>>>>> 67be96a0649e08d0b872015aac1098517af5138e
   
 # Extract data from stormwatch.weather_readings
 # Return the latest weather record in the time window
@@ -118,11 +138,17 @@ def extract_weather_data(start_time, end_time):
       
     data=cur.fetchone()
 
+<<<<<<< HEAD
     if data==None:
       continue
 
     else:
       weather_records.append(helper_weather_extract(data, node[1]))
+=======
+
+    if data!=None:
+        weather_records.append(helper_weather_extract(data))
+>>>>>>> 67be96a0649e08d0b872015aac1098517af5138e
               
   return weather_records
 
@@ -255,6 +281,20 @@ def extract_history_weather_data(node, weather_start_time, weather_end_time):
       rainfall_6h+=float(row[0])
     rainfall_24h+=float(row[0])
   
+<<<<<<< HEAD
+=======
+  
+  if data==():
+      weather_data={
+          "nodename" : node,
+          "coordinates" : None,
+          "history":[],
+          "rainfall_1h": rainfall_1h,
+          "rainfall_6h": rainfall_6h,
+          "rainfall_24h": rainfall_24h
+          }
+      return weather_data
+>>>>>>> 67be96a0649e08d0b872015aac1098517af5138e
     
   
   longitude = float(data[0][0]) 
