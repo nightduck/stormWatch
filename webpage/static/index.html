@@ -121,70 +121,88 @@
                         <h1 id="info-header"></h1>
                         <button id="Refresh" type="button" style="float: right; margin-top: 30px; margin-bottom: 10px;">Refresh</button>
                     </div>
-                    <table id="node_1" style="position: absolute; visibility: hidden; font-size: 13px" >
-                        <tr>
-                          <td><b>Coordinates<b></td>
-                          <td id="node_1_coordinates"></td>
-                        </tr>
-                        <tr>
-                            <td><b>Time<b></td>
-                            <td id="node_1_time"></td>
-                        </tr>
-                        <tr>
-                            <td><b>Battery (V)<b></td>
-                            <td id="node_1_battery"></td>
-                        </tr>
-                        <tr>
-                          <td><b>Temprature (&deg;C)<b></td>
-                          <td id="node_1_temp"></td>
-                        </tr>
-                        <tr>
-                          <td><b>Pressure (Pa)<b></td>
-                          <td id="node_1_pressure"></td>
-                        </tr>
-                        <tr>
-                          <td><b>Humidity (%)<b></td>
-                          <td id="node_1_humidity"></td>
-                        </tr>
-                        <tr>
-                          <td><b>Rainfall (mm)<b></td>
-                          <td id="node_1_rainfall"></td>
-                        </tr>
-                        <tr>
-                          <td><b>Wind Direction<b></td>
-                          <td id="node_1_wind_direction"></td>
-                        </tr>
-                        <tr>
-                            <td><b>Wind Speed (m/s)<b></td>
-                            <td id="node_1_wind_speed"></td>
-                        </tr>
-                    </table>
-                    <table id="node" style="position: absolute; visibility: hidden;">
-                        <tr>
-                          <td><b>Coordinates<b></td>
-                          <td id="node_coordinates"></td>
-                        </tr>
-                        <tr>
-                            <td><b>Time<b></td>
-                            <td id="node_time"></td>
-                        </tr>
-                        <tr>
-                            <td><b>Battery (V)<b></td>
-                            <td id="node_battery"></td>
-                        </tr>
-                    </table>
-                    <table id="light" style="position: absolute; visibility: hidden;">
-                        <tr>
-                          <td><b>Coordinates<b></td>
-                          <td id="light_coordinates"></td>
-                        </tr>
-                        <tr>
-                            <td><b>Time<b></td>
-                            <td id="light_time"></td>
-                        </tr>
-                    </table>
+                    <div class="row"  style="margin-top: 1%;">
+                        <div style="float: left; width: 50%">
+                            <table id="node_1" style="position: absolute; visibility: hidden; font-size: 13px" >
+                                <tr>
+                                  <td><b>Coordinates<b></td>
+                                  <td id="node_1_coordinates"></td>
+                                </tr>
+                                <tr>
+                                    <td><b>Time<b></td>
+                                    <td id="node_1_time"></td>
+                                </tr>
+                                <tr>
+                                    <td><b>Battery (V)<b></td>
+                                    <td id="node_1_battery"></td>
+                                </tr>
+                                <tr>
+                                  <td><b>Temprature (&deg;C)<b></td>
+                                  <td id="node_1_temp"></td>
+                                </tr>
+                                <tr>
+                                  <td><b>Pressure (Pa)<b></td>
+                                  <td id="node_1_pressure"></td>
+                                </tr>
+                                <tr>
+                                  <td><b>Humidity (%)<b></td>
+                                  <td id="node_1_humidity"></td>
+                                </tr>
+                                <tr>
+                                  <td><b>Rainfall (mm)<b></td>
+                                  <td id="node_1_rainfall"></td>
+                                </tr>
+                                <tr>
+                                  <td><b>Wind Direction<b></td>
+                                  <td id="node_1_wind_direction"></td>
+                                </tr>
+                                <tr>
+                                    <td><b>Wind Speed (m/s)<b></td>
+                                    <td id="node_1_wind_speed"></td>
+                                </tr>
+                            </table>
+                            <table id="node" style="position: absolute; visibility: hidden;">
+                                <tr>
+                                  <td><b>Coordinates<b></td>
+                                  <td id="node_coordinates"></td>
+                                </tr>
+                                <tr>
+                                    <td><b>Time<b></td>
+                                    <td id="node_time"></td>
+                                </tr>
+                                <tr>
+                                    <td><b>Battery (V)<b></td>
+                                    <td id="node_battery"></td>
+                                </tr>
+                            </table>
+                            <table id="light" style="position: absolute; visibility: hidden;">
+                                <tr>
+                                  <td><b>Coordinates<b></td>
+                                  <td id="light_coordinates"></td>
+                                </tr>
+                                <tr>
+                                    <td><b>Time<b></td>
+                                    <td id="light_time"></td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div id="node_config" style="width: 50%; float: right; padding-left: 3%; visibility: hidden">
+                            <p style="font-size:20px">Node Configuration</p>
+                            <form>
+                                <label for="fname" style="font-size: 13px">Noise Level:</label><br>
+                                <input type="text" id="fname" name="fname"><br>
+                                <label for="lname" style="font-size: 13px">Spike Rejection:</label><br>
+                                <input type="text" id="lname" name="lname"><br>
+                                <label for="nname" style="font-size: 13px">Lightning Threshold:</label><br>
+                                <input type="text" id="nname" name="nname"><br>
+                                <label for="gname" style="font-size: 13px">Watchdog Threshold:</label><br>
+                                <input type="text" id="gname" name="nname"><br>
+                            </form>
+                            <button id="config" type="button" style="margin-top: 3%;">Deploy</button>
+                        </div>
+                    </div>
                 </section>
-                <div class="chart" style="position: relative; margin-top: 35%; margin-left: 2%; visibility: hidden;">
+                <div class="chart" style="position: relative; margin-top: 6.5%; margin-left: 2%; visibility: hidden;">
                     <div class="row"  style="margin-top: 1%; width: 100%;">
                         <form style="margin-bottom: 1%;">
                             <label for="FromTimeForm">From:</label>

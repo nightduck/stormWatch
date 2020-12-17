@@ -11,15 +11,15 @@ HISTORY_WINDOW = 360       // Number of seconds of lightning history to show
 
 
 // var update_url = LAMBDA_ADDRESS;
-var update_url = "sample_data.json"  // Temporary stand-in
+// var update_url = "sample_data.json"  // Temporary stand-in
 
-var map = L.map('map').setView([38.638336, -90.284672], 11);
+var map = L.map('map').setView([38.638336, -90.1], 11);
 mapLink =
     '<a href="http://openstreetmap.org">OpenStreetMap</a>';
 L.tileLayer(
     'http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; ' + mapLink + ' Contributors',
-    maxZoom: 20,
+    maxZoom: 17,
     }).addTo(map);
 
 /* Initialize the SVG layer */
@@ -101,7 +101,7 @@ d3.json("http://127.0.0.1:5000/update/1507600000/" + currDateTimeNode, function(
             }
             d3.select('#info-header').text(d.nodename);
             d3.select('#Refresh').style('visibility','visible');
-
+            d3.select('#node_config').style('visibility','visible');
             d3.select('#light').style('visibility','hidden');
 
             collection.nodes.find(function(item, i){
@@ -130,6 +130,7 @@ d3.json("http://127.0.0.1:5000/update/1507600000/" + currDateTimeNode, function(
             d3.select('#light').style('visibility','visible');
             d3.select('.chart').style('visibility','hidden');
             d3.select('#Refresh').style('visibility','hidden');
+            d3.select('#node_config').style('visibility','hidden');
 
             d3.select('#light_coordinates').text("[" + d.coordinates[0] + ", " + d.coordinates[1] + "]");
             d3.select('#light_time').text(d.timestamp);
