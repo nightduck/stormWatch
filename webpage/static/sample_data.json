@@ -1,43 +1,54 @@
 {
-  "nodes": [
+  "nodes" : [
     {
-      "nodename": "node01",
-      "coordinates": [38.635105, -90.347663],
-      "temp": 23.48, "pressure": 1009.27,
-      "humidity": 45.0771,
-      "rainfall": 1.97036,
-      "wind_direction": null,
-      "wind_speed": 1.9619
+      "nodename" : "node01",
+      "coordinates" : [38.635105,-90.347663],
+      "temp" : 25.4,
+      "pressure" : 1004.23,
+      "humidity": 11.4,
+      "rainfall" : 0,
+      "wind_direction" : "NNW",
+      "wind_speed" : 3.6
     },
     {
-      "nodename": "node02",
-      "coordinates": [38.639946, -90.293985],
-      "temp": null,
-      "pressure": null,
-      "humidity": null,
-      "rainfall": null,
-      "wind_direction": null,
-      "wind_speed": null
+      "nodename" : "node02",
+      "coordinates" : [38.639946,-90.293985],
+      "temp" : 25.333,
+      "pressure" : 996.47,
+      "humidity": 11.3,
+      "rainfall" : 0,
+      "wind_direction" : "NNW",
+      "wind_speed" : 4.1
     },
     {
-      "nodename": "node03",
-      "coordinates": [38.749572, -90.370141],
-      "temp": null,
-      "pressure": null,
-      "humidity": null,
-      "rainfall": null,
-      "wind_direction": null,
-      "wind_speed": null
+      "nodename" : "node04",
+      "coordinates" : [38.749572,-90.370141],
+      "temp" : 25.7,
+      "pressure" : 1001.57,
+      "humidity": 11.4,
+      "rainfall" : 0,
+      "wind_direction" : "NNW",
+      "wind_speed" : 3.2
     },
     {
-      "nodename": "node04",
-      "coordinates": [38.592107, -90.233985],
-      "temp": null,
-      "pressure": null,
-      "humidity": null,
-      "rainfall": null,
-      "wind_direction": null,
-      "wind_speed": null
+      "nodename" : "node05",
+      "coordinates" : [38.562107,-90.264256],
+      "temp" : 25.1,
+      "pressure" : 1010.39,
+      "humidity": 10.9,
+      "rainfall" : 0,
+      "wind_direction" : "NNW",
+      "wind_speed" : 4.5
+    },
+    {
+      "nodename" : "node03",
+      "coordinates" : [3.624604,-90.184972],
+      "temp" : 25.2,
+      "pressure" : 1007.15,
+      "humidity": 10.2,
+      "rainfall" : 0,
+      "wind_direction" : "NNW",
+      "wind_speed" : 3.1
     }
   ],
   "lightning" : [
@@ -48,6 +59,10 @@
     {
       "coordinates" : [38.731483,-90.325985],
       "time" : "2020-11-10T13:46:00.00Z"
+    },
+    {
+      "coordinates" : [38.670483,-90.195985],
+      "time" : "2020-11-10T13:47:00.00Z"
     }
   ]
 }

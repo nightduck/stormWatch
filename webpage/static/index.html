@@ -6,43 +6,211 @@
     <link rel="stylesheet" href="https://d19vzq90twjlae.cloudfront.net/leaflet-0.7/leaflet.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.17/d3.min.js"></script>
     <script src="https://d19vzq90twjlae.cloudfront.net/leaflet-0.7/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+    <script src="https://d3js.org/d3.v4.min.js"></script>
+    <script src="https://d3js.org/d3-time.v2.min.js"></script>
+    <script src="https://d3js.org/d3-time-format.v3.min.js"></script>
+    <script src="moment.min.js"></script> 
+    <script src="combodate.js"></script> 
     <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
     <style>
+        html, body, .container, .row {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+        }
+        .header {
+            background: #007360;
+            color: white;
+            width: 100%;
+            height:5.5%;
+        }
+        #headerText{
+            padding-left: 1%;
+            color: white;
+            font-size: 40px;
+            margin: 5px;
+            width: 50%;
+            float: left;
+        }
         .columnLeft {
             float: left;
-            width: 1024px;
-            height: 720px;
+            width: 100%;
+            height:96%;
         }
         .columnRight {
-            margin-left: 20px;
-            padding-top: 10px;
             float: left; 
-            width: 300px;
-            height: 720px;
-            position: relative;
+            width: 0%;
+            height:96%;
+        }
+
+        section {
+            margin-left: 2%;
+        }
+
+        #info-header{
+            font-size:30px;
+            color:black;
+            float: left;
+            /* margin-top: 1%; */
+        }
+
+        #node,#node_1,#light{
+            width:50%;
+            margin-bottom: 2%;
+        }
+
+        .line {
+            fill: none;
+            stroke: #ffab00;
+            stroke-width: 3;
+        }
+
+        /* Style the dots by assigning a fill and stroke */
+        .dot {
+            fill: #ffab00;
+            stroke: #fff;
+        }
+
+        .axis {
+            font: 10px sans-serif;
+        }
+
+        .axis path,.axis line {
+        fill: none;
+        stroke: #000;
+        shape-rendering: crispEdges;
+        }
+
+        .bar { 
+            fill: #005f85; 
+        }
+
+        table {
+            font-family: arial, sans-serif;
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        td{
+            border: 1px solid #dddddd;
+            text-align: left;
+            padding: 8px;
+        }
+
+        tr:nth-child(even) {
+            background-color: #eeeeee;
         }
     </style>
 </head>
 <body>
-    <div class="row">
-        <h1 style="font-size:100px; color:black; margin:20px;">stormWatch</h1>
-        <div id="map" class="columnLeft"></div>
-        <div class="columnRight">
-            <h1 style="font-size:30px; color:black; margin:10px; visibility: hidden;" id="info-header">Node Information</h1>
-            <ul class="list-group" id="node" style="visibility: hidden; position: absolute;">
-                <li class="list-group-item list-group-item-info" id="node_nodename"></li>
-                <li class="list-group-item list-group-item-info" id="node_coordinates"></li>
-                <li class="list-group-item list-group-item-info" id="node_temp"></li>
-                <li class="list-group-item list-group-item-info" id="node_pressure"></li>
-                <li class="list-group-item list-group-item-info" id="node_humidity"></li>
-                <li class="list-group-item list-group-item-info" id="node_rainfall"></li>
-                <li class="list-group-item list-group-item-info" id="node_wind_direction"></li>
-                <li class="list-group-item list-group-item-info" id="node_wind_speed"></li>
-            </ul> 
-            <ul class="list-group" id="light" style="visibility: hidden; position: absolute;">
-                <li class="list-group-item list-group-item-success" id="light_coordinates"></li>
-                <li class="list-group-item list-group-item-success" id="light_time"></li>
-            </ul> 
+    <div class="container">
+        <div class="row header">
+            <h1 id="headerText">stormWatch</h1>
+            <div style="float: left; width: 49%; padding-right: 0.5%; margin: 4.5px">
+                <img src="desktop-digital-shield-outline-rev.png" width="42px" height="42px" style="float: right; padding-right: 5px;">
+            </div>
+        </div> 
+        <div class="row">
+            <!-- <h1 style="font-size:100px; color:black; margin:20px;">stormWatch</h1> -->
+            <div id="map" class="columnLeft"></div>
+            <div class="columnRight">
+                <section style="position: relative;">
+                    <div class="row"  style="margin-top: 1%; width: 50%;">
+                        <h1 id="info-header"></h1>
+                        <button id="Refresh" type="button" style="float: right; margin-top: 30px; margin-bottom: 10px;">Refresh</button>
+                    </div>
+                    <table id="node_1" style="position: absolute; visibility: hidden; font-size: 13px" >
+                        <tr>
+                          <td><b>Coordinates<b></td>
+                          <td id="node_1_coordinates"></td>
+                        </tr>
+                        <tr>
+                            <td><b>Time<b></td>
+                            <td id="node_1_time"></td>
+                        </tr>
+                        <tr>
+                            <td><b>Battery (V)<b></td>
+                            <td id="node_1_battery"></td>
+                        </tr>
+                        <tr>
+                          <td><b>Temprature (&deg;C)<b></td>
+                          <td id="node_1_temp"></td>
+                        </tr>
+                        <tr>
+                          <td><b>Pressure (Pa)<b></td>
+                          <td id="node_1_pressure"></td>
+                        </tr>
+                        <tr>
+                          <td><b>Humidity (%)<b></td>
+                          <td id="node_1_humidity"></td>
+                        </tr>
+                        <tr>
+                          <td><b>Rainfall (mm)<b></td>
+                          <td id="node_1_rainfall"></td>
+                        </tr>
+                        <tr>
+                          <td><b>Wind Direction<b></td>
+                          <td id="node_1_wind_direction"></td>
+                        </tr>
+                        <tr>
+                            <td><b>Wind Speed (m/s)<b></td>
+                            <td id="node_1_wind_speed"></td>
+                        </tr>
+                    </table>
+                    <table id="node" style="position: absolute; visibility: hidden;">
+                        <tr>
+                          <td><b>Coordinates<b></td>
+                          <td id="node_coordinates"></td>
+                        </tr>
+                        <tr>
+                            <td><b>Time<b></td>
+                            <td id="node_time"></td>
+                        </tr>
+                        <tr>
+                            <td><b>Battery (V)<b></td>
+                            <td id="node_battery"></td>
+                        </tr>
+                    </table>
+                    <table id="light" style="position: absolute; visibility: hidden;">
+                        <tr>
+                          <td><b>Coordinates<b></td>
+                          <td id="light_coordinates"></td>
+                        </tr>
+                        <tr>
+                            <td><b>Time<b></td>
+                            <td id="light_time"></td>
+                        </tr>
+                    </table>
+                </section>
+                <div class="chart" style="position: relative; margin-top: 35%; margin-left: 2%; visibility: hidden;">
+                    <div class="row"  style="margin-top: 1%; width: 100%;">
+                        <form style="margin-bottom: 1%;">
+                            <label for="FromTimeForm">From:</label>
+                            <input type="date" id="FromDate" name="FromDate">
+                            <input type="text" id="datetime_from" data-format="HH:mm" data-template="HH : mm" name="datetimeFrom">
+                            <label for="ToTimeForm">To:</label>
+                            <input type="date" id="ToDate" name="ToDate">
+                            <input type="text" id="datetime_to" data-format="HH:mm" data-template="HH : mm" name="datetimeTo">
+                            <!-- <input type="submit" value="Submit"> -->
+                        </form>
+                        <button id="form_button" type="button" style="margin-bottom: 2%;">Submit</button>
+                    </div>
+<!--                    <div class="row"  style="margin-top: 1%; width: 50%;">-->
+<!--                        <h1 id="info-header"></h1>-->
+<!--                        <button id="Refresh" type="button" style="float: right; margin-top: 30px; margin-bottom: 10px;">Refresh</button>-->
+<!--                    </div>-->
+                    <dive class="row chart1" style="height: 30%">
+                        <dive id="pressure" style="width: 50%;"></dive>
+                        <dive id="temprature" style="width: 50%;"></dive>
+                    </dive>
+                    <dive class="row chart2" style="height: 30%">
+                        <dive id="humidity" style="width: 50%;"></dive>
+                        <dive id="rainfall" style="width: 50%;"></dive>
+                    </dive>
+                </div>
+            </div>
         </div>
     </div>
     <script src="map.js"></script>

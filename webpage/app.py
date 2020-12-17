@@ -145,8 +145,8 @@ def extract_lightning_data(lightning_start_time, lightning_end_time):
     
 
   for row in data:
-    longitude = float(row[0]) 
-    latitude = float(row[1]) 
+    longitude = float(row[1])
+    latitude = float(row[0])
     timestamp=str(row[2]) 
     
     current_data={

@@ -1,0 +1,269 @@
+{
+    "coordinates" : [38.648814,-90.310566],
+    "history" : [
+        {
+            "battery":3.21138,
+            "humidity":48.29,
+            "pressure":996.458,
+            "rainfall":0.0,
+            "temp":21.64,
+            "timestamp":"2020-12-10 18:44:00",
+            "wind_direction":null,
+            "wind_speed":3.2
+        },
+        {
+            "battery":3.26294,
+            "humidity":48.2197,
+            "pressure":996.475,
+            "rainfall":0.0,
+            "temp":21.64,
+            "timestamp":"2020-12-10 18:50:07",
+            "wind_direction":null,
+            "wind_speed":2.4
+        },
+        {
+            "battery":3.27422,
+            "humidity":47.9766,
+            "pressure":996.414,
+            "rainfall":0.0,
+            "temp":21.65,
+            "timestamp":"2020-12-10 18:56:13",
+            "wind_direction":null,
+            "wind_speed":3.2
+        },
+        {
+            "battery":3.34351,
+            "humidity":47.0469,
+            "pressure":996.074,
+            "rainfall":0.0,
+            "temp":22.14,
+            "timestamp":"2020-12-10 19:26:39",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.3564,
+            "humidity":47.1543,
+            "pressure":996.04,
+            "rainfall":0.0,
+            "temp":22.27,
+            "timestamp":"2020-12-10 19:32:45",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.36929,
+            "humidity":47.2578,
+            "pressure":996.081,
+            "rainfall":0.0,
+            "temp":22.25,
+            "timestamp":"2020-12-10 19:38:52",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.37734,
+            "humidity":47.374,
+            "pressure":996.065,
+            "rainfall":0.0,
+            "temp":22.24,
+            "timestamp":"2020-12-10 19:45:00",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.38701,
+            "humidity":47.5332,
+            "pressure":996.021,
+            "rainfall":0.0,
+            "temp":22.2,
+            "timestamp":"2020-12-10 19:51:06",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.39346,
+            "humidity":47.7129,
+            "pressure":995.858,
+            "rainfall":0.0,
+            "temp":22.13,
+            "timestamp":"2020-12-10 19:57:11",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.39507,
+            "humidity":47.3838,
+            "pressure":995.774,
+            "rainfall":0.0,
+            "temp":22.12,
+            "timestamp":"2020-12-10 20:03:17",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.40313,
+            "humidity":47.458,
+            "pressure":995.748,
+            "rainfall":0.0,
+            "temp":22.04,
+            "timestamp":"2020-12-10 20:09:12",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.40313,
+            "humidity":47.4443,
+            "pressure":995.749,
+            "rainfall":0.0,
+            "temp":22.02,
+            "timestamp":"2020-12-10 20:15:18",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.40796,
+            "humidity":47.7256,
+            "pressure":995.638,
+            "rainfall":0.0,
+            "temp":22.04,
+            "timestamp":"2020-12-10 20:21:23",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.42085,
+            "humidity":47.5644,
+            "pressure":995.565,
+            "rainfall":0.0,
+            "temp":22.05,
+            "timestamp":"2020-12-10 20:27:30",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.42891,
+            "humidity":47.415,
+            "pressure":995.487,
+            "rainfall":0.0,
+            "temp":22.09,
+            "timestamp":"2020-12-10 20:33:35",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.43374,
+            "humidity":47.4062,
+            "pressure":995.452,
+            "rainfall":0.0,
+            "temp":22.1,
+            "timestamp":"2020-12-10 20:39:40",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.44341,
+            "humidity":47.4854,
+            "pressure":995.512,
+            "rainfall":0.0,
+            "temp":22.09,
+            "timestamp":"2020-12-10 20:45:34",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.45308,
+            "humidity":47.3828,
+            "pressure":995.556,
+            "rainfall":0.0,
+            "temp":22.0,
+            "timestamp":"2020-12-10 20:51:39",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.46597,
+            "humidity":47.3408,
+            "pressure":995.581,
+            "rainfall":0.0,
+            "temp":21.93,
+            "timestamp":"2020-12-10 20:57:47",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.47886,
+            "humidity":47.4912,
+            "pressure":995.541,
+            "rainfall":0.0,
+            "temp":21.8,
+            "timestamp":"2020-12-10 21:03:52",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.49175,
+            "humidity":47.2646,
+            "pressure":995.604,
+            "rainfall":0.0,
+            "temp":21.87,
+            "timestamp":"2020-12-10 21:09:58",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.50625,
+            "humidity":47.4062,
+            "pressure":995.664,
+            "rainfall":0.0,
+            "temp":21.99,
+            "timestamp":"2020-12-10 21:16:04",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.52397,
+            "humidity":47.1113,
+            "pressure":995.751,
+            "rainfall":0.0,
+            "temp":22.08,
+            "timestamp":"2020-12-10 21:22:09",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.53525,
+            "humidity":46.8193,
+            "pressure":995.664,
+            "rainfall":0.0,
+            "temp":22.08,
+            "timestamp":"2020-12-10 21:28:14",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.55781,
+            "humidity":46.7461,
+            "pressure":995.742,
+            "rainfall":0.0,
+            "temp":22.06,
+            "timestamp":"2020-12-10 21:34:19",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        },
+        {
+            "battery":3.57554,
+            "humidity":46.7432,
+            "pressure":995.81,
+            "rainfall":0.0,
+            "temp":22.03,
+            "timestamp":"2020-12-10 21:40:24",
+            "wind_direction":"NNE",
+            "wind_speed":0.0
+        }
+    ],
+    "nodename":"node01",
+    "rainfall_1h":10.0,
+    "rainfall_24h":22.3,
+    "rainfall_6h":17.5
+}
