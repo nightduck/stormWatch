@@ -41,9 +41,11 @@ var lightn_feature = null;
 // getData();
 // setInterval(getData, 3000);
 
+var now = new Date();
+var utc = new Date(now.getTime() + now.getTimezoneOffset() * 60000);
 
 // function getData() {
-var currDateTimeNode = Math.round((new Date().getTime())/1000);
+var currDateTimeNode = Math.round(utc/1000);
 console.log(currDateTimeNode);
 d3.json("http://127.0.0.1:5000/update/1507600000/" + currDateTimeNode, function(collection) {
     console.log(collection);
@@ -166,7 +168,7 @@ document.getElementById("Refresh").onclick = function() {getRefresh()};
 function getRefresh() {
     if (nodeClicked >= 0) {
         console.log("clicked " + nodeClicked);
-        var currDateTimeTable = Math.round((new Date().getTime())/1000);
+        var currDateTimeTable = Math.round(utc/1000);
         $.get( "http://127.0.0.1:5000/update/1507600000/" + currDateTimeTable, function( data ) {
             const nodeShow = data.nodes[nodeClicked];
             if (nodeShow.nodename =="node01" && document.getElementById("node_1").style.visibility == "visible") {
