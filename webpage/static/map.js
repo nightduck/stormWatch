@@ -47,7 +47,7 @@ var utc = new Date(now.getTime() + now.getTimezoneOffset() * 60000);
 // function getData() {
 var currDateTimeNode = Math.round(utc/1000);
 console.log(currDateTimeNode);
-d3.json("http://127.0.0.1:5000/update/1507600000/" + currDateTimeNode, function(collection) {
+d3.json("http://" + location.hostname + ":" + location.port + "/update/1507600000/" + currDateTimeNode, function(collection) {
     console.log(collection);
     /* Add a LatLng object to each item in the dataset */
     collection.nodes.forEach(function(d) {
@@ -169,7 +169,7 @@ function getRefresh() {
     if (nodeClicked >= 0) {
         console.log("clicked " + nodeClicked);
         var currDateTimeTable = Math.round(utc/1000);
-        $.get( "http://127.0.0.1:5000/update/1507600000/" + currDateTimeTable, function( data ) {
+        $.get( "http://" + location.hostname + ":" + location.port + "/update/1507600000/" + currDateTimeTable, function( data ) {
             const nodeShow = data.nodes[nodeClicked];
             if (nodeShow.nodename =="node01" && document.getElementById("node_1").style.visibility == "visible") {
                 document.getElementById('node_1_time').textContent = nodeShow.timestamp;
@@ -220,7 +220,7 @@ function getChart() {
         $("#humidity").empty();
         $("#rainfall").empty();
 
-        $.get( "http://127.0.0.1:5000/history/" + nodeNameCliked  + "/" + Math.round(valFrom.getTime()/1000) + "/" + Math.round(valTo.getTime()/1000), function( data ) {
+        $.get( "http://" + location.hostname + ":" + location.port + "/history/" + nodeNameCliked  + "/" + Math.round(valFrom.getTime()/1000) + "/" + Math.round(valTo.getTime()/1000), function( data ) {
             console.log(data);
             const n = data.history.length;
             const history = data.history;
