@@ -10,8 +10,10 @@ The last line prevents you from accidentally publishing your config, and all the
 
 ## Website
 
-To test and run the website locally on your device, you can simply navigate to this folder and
+To test and run the website locally on your device, you can simply navigate to this folder and in a terminal,
 
     python app.py
+
+Then, copy the link from the terminal and paste to a web browser (Google Chrome prefered).
 
 Make sure to use the right link for Lambda REST call in tormWatch/webpage/static/map.js
