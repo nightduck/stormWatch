@@ -220,7 +220,7 @@ function getChart() {
         $("#humidity").empty();
         $("#rainfall").empty();
 
-        $.get( "http://127.0.0.1:5000/history/" + nodeNameCliked  + "/" + Math.round(valFrom.getTime()/1000) + "/" + Math.round(valTo.getTime()/1000), function( data ) {
+        $.get( "http://127.0.0.1:5000/history/" + nodeNameCliked  + "/" + Math.round(valFrom.getTime()/1000 + now.getTimezoneOffset() * 60) + "/" + Math.round(valTo.getTime()/1000 + now.getTimezoneOffset() * 60), function( data ) {
             console.log(data);
             const n = data.history.length;
             const history = data.history;
